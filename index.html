@@ -255,6 +255,86 @@
   }
   #inventory-btn .big{ font-size:20px; line-height:1; }
 
+
+  #index-btn{
+    position:fixed; right:16px; bottom:224px;
+    z-index:9; pointer-events:auto;
+    background:linear-gradient(180deg, #46c6ff, #2a78ff);
+    color:white; font-weight:800; font-size:13px;
+    padding:11px 14px; border-radius:16px;
+    box-shadow:0 4px 0 #1f5ed0, 0 8px 16px rgba(42,120,255,0.28);
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    border:none;
+  }
+  #index-btn .big{ font-size:20px; line-height:1; }
+
+  #index-overlay{
+    position:fixed; inset:0; z-index:31;
+    display:none; align-items:flex-end; justify-content:center;
+    background:rgba(20,16,40,0.5);
+  }
+  #index-panel{
+    background:var(--cream); width:100%; max-width:720px;
+    height:min(80vh, 720px);
+    border-radius:26px 26px 0 0;
+    box-shadow:0 -10px 40px rgba(0,0,0,0.35);
+    display:flex; flex-direction:column;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+    overflow:hidden;
+  }
+  #index-head{
+    display:flex; align-items:flex-start; justify-content:space-between;
+    gap:12px;
+    padding:16px 18px 10px 18px;
+  }
+  #index-head h3{ margin:0; font-size:17px; color:var(--ink); }
+  #index-summary{ font-size:12px; color:var(--ink-soft); font-weight:700; margin-top:4px; line-height:1.35; }
+  #index-close{
+    background:rgba(45,42,74,0.1); border:none; border-radius:50%;
+    width:32px; height:32px; font-size:16px; font-weight:800; color:var(--ink);
+    flex:none;
+  }
+  #index-search-row{ padding:0 18px 10px 18px; }
+  #index-search{
+    width:100%; border:2px solid rgba(45,42,74,0.14); border-radius:14px;
+    padding:12px 14px; font-size:14px; font-weight:800; outline:none;
+    background:white; color:var(--ink);
+  }
+  #index-search::placeholder{ color:rgba(91,87,121,0.7); }
+  .index-section{
+    margin:0 18px 12px 18px;
+    background:white; border-radius:18px; padding:12px;
+    box-shadow:0 4px 12px rgba(45,42,74,0.08);
+    overflow:hidden;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .index-section h4{ margin:0; font-size:14px; color:var(--ink); }
+  #index-rarity-list, #index-owned-list{
+    display:flex; flex-direction:column; gap:8px;
+    max-height:calc(36vh - 40px);
+    overflow:auto;
+  }
+  .index-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:#FBFBFF; border-radius:14px; padding:10px 12px;
+    border:1px solid rgba(45,42,74,0.06);
+  }
+  .index-row .left{ min-width:0; }
+  .index-row .name{ font-size:13px; font-weight:900; color:var(--ink); line-height:1.2; }
+  .index-row .sub{ font-size:11px; color:var(--ink-soft); font-weight:700; margin-top:3px; line-height:1.2; }
+  .index-row .right{ text-align:right; flex:none; }
+  .index-row .chance{ font-size:13px; font-weight:900; color:var(--purple-dark); }
+  .index-row .small{ font-size:10px; color:var(--ink-soft); font-weight:700; margin-top:3px; line-height:1.15; }
+  .index-row .rarity-chip{
+    display:inline-block; margin-left:6px; padding:2px 7px; border-radius:999px;
+    font-size:10px; font-weight:900; color:white;
+  }
+  .index-empty{
+    text-align:center; color:var(--ink-soft); font-weight:700; font-size:13px;
+    padding:22px 8px;
+  }
+
+
   #inventory-overlay{
     position:fixed; inset:0; z-index:30;
     display:none; align-items:flex-end; justify-content:center;
@@ -711,6 +791,7 @@
 </div>
 
 <button id="inventory-btn"><span class="big">🎒</span><span>インベントリ</span></button>
+<button id="index-btn"><span class="big">📘</span><span>インデックス</span></button>
 
 <div id="inventory-overlay">
   <div id="inventory-panel">
@@ -723,6 +804,30 @@
     <div id="inventory-actions">
       <button class="inv-btn" id="deploy-all-btn">全員出陣</button>
       <button class="inv-btn" id="recall-all-btn">全員待機</button>
+    </div>
+  </div>
+</div>
+
+
+<div id="index-overlay">
+  <div id="index-panel">
+    <div id="index-head">
+      <div>
+        <h3>📘 インデックス</h3>
+        <div id="index-summary">---</div>
+      </div>
+      <button id="index-close">✕</button>
+    </div>
+    <div id="index-search-row">
+      <input id="index-search" type="text" placeholder="モンスター名で絞り込み">
+    </div>
+    <div class="index-section">
+      <h4>レアリティ確率</h4>
+      <div id="index-rarity-list"></div>
+    </div>
+    <div class="index-section">
+      <h4>所持モンスターの確率</h4>
+      <div id="index-owned-list"></div>
     </div>
   </div>
 </div>
@@ -820,7 +925,7 @@
   "use strict";
 
   /* =========================================================
-     MONSTER DEFINITIONS (170 total, 34 rarity tiers)
+     MONSTER DEFINITIONS (195 total, 44 rarity tiers)
      Generated with a balanced weight table; power/guard/luck
      scale with rarity for the auto-battle system.
   ========================================================= */
@@ -859,10 +964,21 @@
     genesis:    { jp:'ジェネシス',    col:'#7DFFB8' },
     overcore:   { jp:'オーバーコア',  col:'#FF8A4D' },
     aphelion:   { jp:'アフェリオン',  col:'#FFFFFF' },
+
+    abyssnova:     { jp:'アビスノヴァ',      col:'#7C5CFC' },
+    nullcore:      { jp:'ヌルコア',          col:'#76FFF0' },
+    quantumcore:   { jp:'クォンタムコア',    col:'#F5F7FF' },
+    hyperion:      { jp:'ハイペリオン',      col:'#FFD97A' },
+    omnistar:      { jp:'オムニスター',      col:'#FFB7E7' },
+    paracore:      { jp:'パラコア',          col:'#9C87FF' },
+    voidsoul:      { jp:'ヴォイドソウル',    col:'#69D6FF' },
+    infinityprime: { jp:'インフィニティプライム', col:'#FFF0B4' },
+    aphelionnova:  { jp:'アフェリオンノヴァ', col:'#FFFFFF' },
+    aphelionprime: { jp:'アフェリオン・プライム', col:'#FFF6DE' },
   };
   // Order used for sorting / display (rarest last). Kept separate from the
   // object above since object key order isn't guaranteed to be relied upon.
-  const RARITY_ORDER = ['common','uncommon','rare','epic','legendary','mythic','divine','celestial','primordial','eternal','ascendant','transcendent','apex','mythos','astral','relic','cosmic','chaos','omega','infinity','singularity','primevoid','godcore','zenith','abyssal','prismatic','eclipse','paradox','nirvana','astrum','voidstar','genesis','overcore','aphelion'];
+  const RARITY_ORDER = ['common','uncommon','rare','epic','legendary','mythic','divine','celestial','primordial','eternal','ascendant','transcendent','apex','mythos','astral','relic','cosmic','chaos','omega','infinity','singularity','primevoid','godcore','zenith','abyssal','prismatic','eclipse','paradox','nirvana','astrum','voidstar','genesis','overcore','aphelion','abyssnova','nullcore','quantumcore','hyperion','omnistar','paracore','voidsoul','infinityprime','aphelionnova','aphelionprime'];
 
   const MONSTER_DEFS = [
     { id:1, key:'pinkle', name:'Pinkle', nameJp:'ピンクル', rarity:'common', color:0xFF9FBB, glow:false, power:13, guard:8, luck:3, coinValue:3.2, weight:3.21429 },
@@ -1057,20 +1173,23 @@
     { id:159, key:'radiantide', name:'RadianTide', nameJp:'ラディアンタイド', rarity:'prismatic', color:0x85FFF0, glow:true, power:635, guard:626, luck:230, coinValue:37200.0, weight:0.000045 },
     { id:160, key:'eclipseon', name:'Eclipseon', nameJp:'エクリプシオン', rarity:'eclipse', color:0x6B5BFF, glow:true, power:690, guard:670, luck:238, coinValue:54000.0, weight:0.000032 },
     { id:161, key:'nightflare', name:'NightFlare', nameJp:'ナイトフレア', rarity:'eclipse', color:0x9A7CFF, glow:true, power:702, guard:688, luck:244, coinValue:56000.0, weight:0.000032 },
-    { id:162, key:'paradoxia', name:'Paradoxia', nameJp:'パラドクシア', rarity:'paradox', color:0xFF6AA2, glow:true, power:760, guard:744, luck:252, coinValue:82000.0, weight:0.000022 },
-    { id:163, key:'voidaria', name:'VoidAria', nameJp:'ヴォイドアリア', rarity:'paradox', color:0xFF92C0, glow:true, power:775, guard:768, luck:258, coinValue:86000.0, weight:0.000022 },
-    { id:164, key:'nirvash', name:'Nirvash', nameJp:'ニルヴァッシュ', rarity:'nirvana', color:0xF8D66D, glow:true, power:835, guard:820, luck:268, coinValue:124000.0, weight:0.000016 },
-    { id:165, key:'astralis', name:'Astralis', nameJp:'アストラリス', rarity:'astrum', color:0x9FE8FF, glow:true, power:900, guard:882, luck:278, coinValue:182000.0, weight:0.000011 },
-    { id:166, key:'voidstar', name:'VoidStar', nameJp:'ヴォイドスター', rarity:'voidstar', color:0x7C4DFF, glow:true, power:980, guard:960, luck:292, coinValue:266000.0, weight:0.000008 },
-    { id:167, key:'genesisflare', name:'GenesisFlare', nameJp:'ジェネシスフレア', rarity:'genesis', color:0x7DFFB8, glow:true, power:1060, guard:1040, luck:304, coinValue:420000.0, weight:0.000006 },
-    { id:168, key:'overcore', name:'OverCore', nameJp:'オーバーコア', rarity:'overcore', color:0xFF8A4D, glow:true, power:1180, guard:1140, luck:318, coinValue:700000.0, weight:0.000004 },
-    { id:169, key:'aphelion', name:'Aphelion', nameJp:'アフェリオン', rarity:'aphelion', color:0xFFFFFF, glow:true, power:1320, guard:1280, luck:332, coinValue:1000000.0, weight:0.000003 },
-    { id:170, key:'aphelionprime', name:'AphelionPrime', nameJp:'アフェリオン・プライム', rarity:'aphelion', color:0xFFF2D6, glow:true, power:1380, guard:1330, luck:340, coinValue:1200000.0, weight:0.000003 },
+    { id:162, key:'paradoxia', name:'Paradoxia', nameJp:'パラドクシア', rarity:'paracore', color:0xFF6AA2, glow:true, power:760, guard:744, luck:252, coinValue:82000.0, weight:0.000022 },
+    { id:163, key:'voidaria', name:'VoidAria', nameJp:'ヴォイドアリア', rarity:'quantumcore', color:0xFF92C0, glow:true, power:775, guard:768, luck:258, coinValue:86000.0, weight:0.000022 },
+    { id:164, key:'nirvash', name:'Nirvash', nameJp:'ニルヴァッシュ', rarity:'hyperion', color:0xF8D66D, glow:true, power:835, guard:820, luck:268, coinValue:124000.0, weight:0.000016 },
+    { id:165, key:'astralis', name:'Astralis', nameJp:'アストラリス', rarity:'omnistar', color:0x9FE8FF, glow:true, power:900, guard:882, luck:278, coinValue:182000.0, weight:0.000011 },
+    { id:166, key:'voidstar', name:'VoidStar', nameJp:'ヴォイドスター', rarity:'infinityprime', color:0x7C4DFF, glow:true, power:980, guard:960, luck:292, coinValue:266000.0, weight:0.000008 },
+    { id:167, key:'genesisflare', name:'GenesisFlare', nameJp:'ジェネシスフレア', rarity:'aphelionnova', color:0x7DFFB8, glow:true, power:1060, guard:1040, luck:304, coinValue:420000.0, weight:0.000006 },
+    { id:168, key:'overcore', name:'OverCore', nameJp:'オーバーコア', rarity:'nullcore', color:0xFF8A4D, glow:true, power:1180, guard:1140, luck:318, coinValue:700000.0, weight:0.000004 },
+    { id:169, key:'aphelion', name:'Aphelion', nameJp:'アフェリオン', rarity:'abyssnova', color:0xFFFFFF, glow:true, power:1320, guard:1280, luck:332, coinValue:1000000.0, weight:0.000003 },
+    { id:170, key:'aphelionprime', name:'AphelionPrime', nameJp:'アフェリオン・プライム', rarity:'aphelionprime', color:0xFFF2D6, glow:true, power:1380, guard:1330, luck:340, coinValue:1200000.0, weight:0.000003 },
+    { id:171, key:'abyssnova', name:'AbyssNova', nameJp:'アビスノヴァ', rarity:'abyssnova', color:0x7C5CFC, glow:true, power:1520, guard:1490, luck:372, coinValue:1750000.0, weight:0.000000060 },
+    { id:172, key:'nullcore', name:'NullCore', nameJp:'ヌルコア', rarity:'nullcore', color:0x76FFF0, glow:true, power:1660, guard:1610, luck:386, coinValue:3100000.0, weight:0.000000045 },
+    { id:173, key:'quantumhalo', name:'QuantumHalo', nameJp:'クォンタムヘイロウ', rarity:'quantumcore', color:0xF5F7FF, glow:true, power:1800, guard:1770, luck:402, coinValue:5200000.0, weight:0.000000034 },
+    { id:174, key:'hyperionarch', name:'HyperionArch', nameJp:'ハイペリオン・アーク', rarity:'hyperion', color:0xFFD97A, glow:true, power:1950, guard:1910, luck:420, coinValue:7800000.0, weight:0.000000026 },
   ];
 
   MONSTER_DEFS.push(...EXTRA_MONSTER_DEFS, ...EXTRA_ULTIMATE_MONSTER_DEFS);
   const BASE_TOTAL_WEIGHT = MONSTER_DEFS.reduce((s,m)=>s+m.weight, 0);
-  const UNBOOSTED_TIERS = new Set(['common','uncommon']);
 
   // A very low rarity weight table so rare monsters stay genuinely rare.
   // Common/uncommon are kept mostly intact; rare+ tiers are heavily damped.
@@ -1099,33 +1218,78 @@
     primevoid: 0.00024,
     godcore: 0.00014,
     zenith: 0.00008,
+
+    abyssal: 0.000060,
+    prismatic: 0.000045,
+    eclipse: 0.000033,
+    paradox: 0.000024,
+    nirvana: 0.000017,
+    astrum: 0.000012,
+    voidstar: 0.0000080,
+    genesis: 0.0000054,
+    overcore: 0.0000036,
+    aphelion: 0.0000022,
+    abyssnova: 0.0000013,
+    nullcore: 0.00000076,
+    quantumcore: 0.00000042,
+    hyperion: 0.00000022,
+    omnistar: 0.00000012,
+    paracore: 0.000000065,
+    voidsoul: 0.000000034,
+    infinityprime: 0.000000017,
+    aphelionnova: 0.000000009,
+    aphelionprime: 0.000000004,
   };
 
-  function pickWeightedMonsterDef(){
-    // The displayed odds remain based on the base table, while the actual
-    // roll uses extra luck-driven bias toward higher rarities.
+  function calculateMonsterRollStats(){
     let baseTotal = 0;
-    let total = 0;
-    const baseWeights = [];
-    const effectiveWeights = MONSTER_DEFS.map(def=>{
+    let effectiveTotal = 0;
+    const perMonster = [];
+    const byRarity = {};
+
+    for(const def of MONSTER_DEFS){
       const rarityMul = RARITY_WEIGHT_MULTIPLIER[def.rarity] ?? 1;
       const charBias = monsterChanceFactor(def);
       const baseWeight = def.weight * rarityMul * charBias;
       const boost = rarityLuckBoost(def);
-      const w = baseWeight * boost;
-      baseWeights.push(baseWeight);
+      const effectiveWeight = baseWeight * boost;
+
       baseTotal += baseWeight;
-      total += w;
-      return w;
-    });
-    let r = Math.random() * total;
-    for(let i=0;i<MONSTER_DEFS.length;i++){
+      effectiveTotal += effectiveWeight;
+      perMonster.push({ def, baseWeight, effectiveWeight });
+
+      if(!byRarity[def.rarity]){
+        byRarity[def.rarity] = { baseWeight:0, effectiveWeight:0, count:0 };
+      }
+      byRarity[def.rarity].baseWeight += baseWeight;
+      byRarity[def.rarity].effectiveWeight += effectiveWeight;
+      byRarity[def.rarity].count += 1;
+    }
+
+    return { baseTotal, effectiveTotal, perMonster, byRarity };
+  }
+
+  function pickWeightedMonsterDef(){
+    const stats = calculateMonsterRollStats();
+    const effectiveWeights = stats.perMonster.map(x=>x.effectiveWeight);
+    let r = Math.random() * stats.effectiveTotal;
+    for(let i=0;i<stats.perMonster.length;i++){
       if(r < effectiveWeights[i]){
-        return { def: MONSTER_DEFS[i], chance: baseWeights[i] / baseTotal };
+        const chosen = stats.perMonster[i];
+        return {
+          def: chosen.def,
+          chance: chosen.baseWeight / stats.baseTotal,
+          actualChance: chosen.effectiveWeight / stats.effectiveTotal,
+        };
       }
       r -= effectiveWeights[i];
     }
-    return { def: MONSTER_DEFS[0], chance: baseWeights[0] / baseTotal };
+    const first = stats.perMonster[0];
+    return {
+      def: first.def,
+      chance: first.baseWeight / stats.baseTotal,
+      actualChance: first.effectiveWeight / stats.effectiveTotal,
+    };
   }
 
   /* =========================================================
@@ -1199,6 +1363,17 @@
     genesis: 6200000000.0,
     overcore: 12000000000.0,
     aphelion: 23000000000.0,
+
+    abyssnova: 42000000000.0,
+    nullcore: 76000000000.0,
+    quantumcore: 135000000000.0,
+    hyperion: 240000000000.0,
+    omnistar: 420000000000.0,
+    paracore: 720000000000.0,
+    voidsoul: 1200000000000.0,
+    infinityprime: 2000000000000.0,
+    aphelionnova: 3600000000000.0,
+    aphelionprime: 6500000000000.0,
   };
   function rarityRewardMultiplier(def){
     const idx = Math.max(0, RARITY_ORDER.indexOf(def.rarity));
@@ -1222,11 +1397,59 @@
     return Math.round(base * Math.pow(1.45, p.level || 0));
   }
 
+  // Permanent luck now works as a staged ladder instead of one giant curve.
+  // 1-100x: Legendary cap, 101-250x: Divine, 251-500x: Primordial, etc.
+  // This keeps low luck from collapsing into only the top rarity.
+  
+const LUCK_BANDS = [
+    { min: 1, max: 100, floor: 'common',       cap: 'legendary',     boostMax: 2.4,  label: 'コモン〜レジェンダリー' },
+    { min: 101, max: 250, floor: 'uncommon',    cap: 'divine',        boostMax: 3.8,  label: 'アンコモン〜ディヴァイン' },
+    { min: 251, max: 500, floor: 'rare',        cap: 'primordial',    boostMax: 5.2,  label: 'レア〜プライモーディアル' },
+    { min: 501, max: 800, floor: 'epic',        cap: 'apex',          boostMax: 7.4,  label: 'エピック〜アペックス' },
+    { min: 801, max: 1200, floor: 'legendary',  cap: 'abyssal',       boostMax: 10.0, label: 'レジェンダリー〜アビサル' },
+    { min: 1201, max: 2500, floor: 'mythic',     cap: 'prismatic',     boostMax: 12.0, label: 'ミシック〜プリズマティック' },
+    { min: 2501, max: 5000, floor: 'divine',     cap: 'eclipse',       boostMax: 14.0, label: 'ディヴァイン〜エクリプス' },
+    { min: 5001, max: 10000, floor: 'celestial', cap: 'paradox',       boostMax: 16.0, label: 'セレスティアル〜パラドックス' },
+    { min: 10001, max: 20000, floor: 'primordial', cap: 'nirvana',     boostMax: 18.0, label: 'プライモーディアル〜ニルヴァーナ' },
+    { min: 20001, max: 40000, floor: 'eternal',  cap: 'astrum',        boostMax: 20.0, label: 'エターナル〜アストラム' },
+    { min: 40001, max: 80000, floor: 'ascendant', cap: 'voidstar',    boostMax: 22.0, label: 'アセンダント〜ヴォイドスター' },
+    { min: 80001, max: 160000, floor: 'transcendent', cap: 'genesis', boostMax: 24.0, label: 'トランセンデント〜ジェネシス' },
+    { min: 160001, max: 320000, floor: 'apex',    cap: 'overcore',     boostMax: 26.0, label: 'アペックス〜オーバーコア' },
+    { min: 320001, max: 640000, floor: 'mythos',   cap: 'aphelion',    boostMax: 28.0, label: 'ミュトス〜アフェリオン' },
+    { min: 640001, max: 1280000, floor: 'astral',  cap: 'abyssnova',   boostMax: 30.0, label: 'アストラル〜アビスノヴァ' },
+    { min: 1280001, max: 2560000, floor: 'relic',   cap: 'nullcore',    boostMax: 33.0, label: 'レリック〜ヌルコア' },
+    { min: 2560001, max: 5120000, floor: 'cosmic',  cap: 'quantumcore', boostMax: 36.0, label: 'コズミック〜クォンタムコア' },
+    { min: 5120001, max: 10240000, floor: 'chaos',  cap: 'hyperion',    boostMax: 40.0, label: 'カオス〜ハイペリオン' },
+    { min: 10240001, max: 20480000, floor: 'omega', cap: 'omnistar',    boostMax: 44.0, label: 'オメガ〜オムニスター' },
+    { min: 20480001, max: 40960000, floor: 'infinity', cap: 'paracore', boostMax: 48.0, label: 'インフィニティ〜パラコア' },
+    { min: 40960001, max: 81920000, floor: 'singularity', cap: 'voidsoul', boostMax: 52.0, label: 'シンギュラリティ〜ヴォイドソウル' },
+    { min: 81920001, max: 163840000, floor: 'primevoid', cap: 'infinityprime', boostMax: 56.0, label: 'プライムヴォイド〜インフィニティプライム' },
+    { min: 163840001, max: 327680000, floor: 'godcore', cap: 'aphelionnova', boostMax: 60.0, label: 'ゴッドコア〜アフェリオンノヴァ' },
+    { min: 327680001, max: Infinity, floor: 'abyssnova', cap: 'aphelionprime', boostMax: 66.0, label: 'アビスノヴァ〜アフェリオン・プライム' },
+  ];
+
+  function getLuckBand(luckMult){
+    const value = Math.max(1, Number(luckMult) || 1);
+    for(const band of LUCK_BANDS){
+      if(value >= band.min && value <= band.max) return band;
+    }
+    return LUCK_BANDS[LUCK_BANDS.length - 1];
+  }
+
+  function rarityIndex(name){
+    const idx = RARITY_ORDER.indexOf(name);
+    return idx < 0 ? 0 : idx;
+  }
+
+  function clamp01(v){
+    return Math.max(0, Math.min(1, v));
+  }
+
   // Permanent luck now rises by x1.2 each purchase, instead of adding a small
   // flat amount. Stage still helps a little, but it is intentionally mild.
   function luckMultiplier(){
-    const purchasedBonus = Math.pow(1.45, GameState.luckLevel);
-    const stageBonus = 1 + (GameState.stage - 1) * 0.03;
+    const purchasedBonus = Math.pow(1.42, GameState.luckLevel);
+    const stageBonus = 1 + (GameState.stage - 1) * 0.025;
     return Math.min(1000000000000000, purchasedBonus * stageBonus);
   }
 
@@ -1241,28 +1464,31 @@
     return Math.round(250 * Math.pow(1.42, stepLevel));
   }
 
-  // Combined boost applied to rare-and-above monster weights.
-  // Common/uncommon stay close to the base table, while rare+ tiers get
-  // increasingly more weight as luck rises so the upper rarities appear
-  // noticeably more often at very high luck.
+  // Luck now works as a real band gate.
+  // - Anything above the current cap is impossible to roll.
+  // - Anything below the current floor is also removed at higher bands,
+  //   so high luck stops handing out weak junk like common/uncommon.
+  // - Inside the band, the top end gets much stronger bias.
   function rarityLuckBoost(def){
-    if(UNBOOSTED_TIERS.has(def.rarity)) return 1;
-
     const luckMult = Math.max(1, luckMultiplier());
-    const luckScale = Math.min(1, Math.log10(luckMult) / 15); // 1e15 => 1.0
-    const stageScale = Math.min(1, Math.max(0, GameState.stage - 1) / 40);
+    const band = getLuckBand(luckMult);
 
-    const rarityIndex = Math.max(0, RARITY_ORDER.indexOf(def.rarity));
-    const rareIndex = Math.max(0, RARITY_ORDER.indexOf('rare'));
-    const upperTierIndex = Math.max(0, rarityIndex - rareIndex); // rare = 0
-    const upperTierSpan = Math.max(1, RARITY_ORDER.length - 1 - rareIndex);
-    const upperTier = upperTierIndex / upperTierSpan; // 0..1
+    const rIndex = rarityIndex(def.rarity);
+    const floorIndex = rarityIndex(band.floor);
+    const capIndex = rarityIndex(band.cap);
 
-    const baseBoost = 1 + (luckScale * 18) + (stageScale * 2.5);
-    const heavyBoost = 1 + Math.pow(upperTier, 1.7) * luckScale * 9000;
-    const apexBoost = Math.pow(1 + luckScale * 90, upperTier * 5.2);
+    if(rIndex < floorIndex || rIndex > capIndex) return 0;
 
-    return Math.min(1000000000000000, baseBoost * heavyBoost * apexBoost);
+    const span = Math.max(1, capIndex - floorIndex);
+    const progress = clamp01((rIndex - floorIndex) / span);
+    const bandProgress = band.max === Infinity ? 1 : clamp01((luckMult - band.min) / Math.max(1, band.max - band.min));
+
+    // The higher the rarity inside the unlocked window, the more strongly it is lifted.
+    const rarityRamp = 0.45 + Math.pow(progress, 1.55) * 0.95;
+    const bandRamp = 1 + (band.boostMax - 1) * (0.25 + 0.75 * bandProgress);
+    const stageRamp = 1 + Math.min(0.35, Math.max(0, GameState.stage - 1) * 0.01);
+
+    return Math.min(1000000, rarityRamp * bandRamp * stageRamp);
   }
 
   // Each monster gets a slight, deterministic odds bias so that even inside the
@@ -1274,6 +1500,38 @@
   }
 
   function formatChancePercentValue(pct){
+    const n = Number(pct);
+    if(!Number.isFinite(n)) return '0';
+    const abs = Math.abs(n);
+    let digits = 2;
+    if(abs < 1){
+      digits = abs >= 0.01 ? 4 : abs >= 0.0001 ? 6 : abs >= 0.000001 ? 8 : 12;
+    }
+    let text = n.toFixed(digits);
+    text = text.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '').replace(/^-0$/, '0');
+    return text;
+  }
+
+  function formatChancePercent(chance){
+    return formatChancePercentValue(Number(chance) * 100);
+  }
+
+  function formatChanceOdds(chance){
+    const n = Number(chance);
+    if(!(n > 0) || !Number.isFinite(n)) return '';
+    const inv = 1 / n;
+    if(!Number.isFinite(inv)) return '';
+    const rounded = Math.round(inv);
+    const diff = Math.abs(inv - rounded);
+    if(diff < 0.005){
+      return '1/' + rounded.toLocaleString('ja-JP');
+    }
+    return '1/' + inv.toLocaleString('ja-JP', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+  }
+function formatChancePercentValue(pct){
     const n = Number(pct);
     if(!Number.isFinite(n)) return '0';
     const abs = Math.abs(n);
@@ -1610,20 +1868,20 @@
   scene.add(islandGroup);
 
   const grassMat = new THREE.MeshStandardMaterial({ color:0x8FE388, roughness:0.9 });
-  const grassGeo = new THREE.CylinderGeometry(GameState.islandRadius, GameState.islandRadius, 0.6, 48);
+  const grassGeo = new THREE.CylinderGeometry(GameState.islandRadius, GameState.islandRadius, 0.6, 72);
   const grass = new THREE.Mesh(grassGeo, grassMat);
   grass.position.y = -0.3;
   grass.receiveShadow = true;
   islandGroup.add(grass);
 
   const sandMat = new THREE.MeshStandardMaterial({ color:0xF4E2A8, roughness:1.0 });
-  const sandGeo = new THREE.CylinderGeometry(GameState.islandRadius+0.55, GameState.islandRadius+0.7, 0.4, 48);
+  const sandGeo = new THREE.CylinderGeometry(GameState.islandRadius+0.55, GameState.islandRadius+0.7, 0.4, 72);
   const sand = new THREE.Mesh(sandGeo, sandMat);
   sand.position.y = -0.55;
   sand.receiveShadow = true;
   islandGroup.add(sand);
 
-  const ringGeo = new THREE.RingGeometry(GameState.islandRadius-0.15, GameState.islandRadius-0.02, 48);
+  const ringGeo = new THREE.RingGeometry(GameState.islandRadius-0.15, GameState.islandRadius-0.02, 72);
   const ringMat = new THREE.MeshBasicMaterial({ color:0x7FD673, transparent:true, opacity:0.5, side:THREE.DoubleSide });
   const ring = new THREE.Mesh(ringGeo, ringMat);
   ring.rotation.x = -Math.PI/2;
@@ -1658,6 +1916,111 @@
     [-13.5,1.5,1.0],[13.2,-1.2,1.05],[2.0,-13.0,0.95],[-2.5,13.2,1.0]
   ];
   treeSpots.forEach(([x,z,s])=> islandGroup.add(makeTree(x,z,s)));
+
+  // Decorative centerpiece: a faint stone path + little ruin pillars so the island
+  // feels more like a handcrafted stage and less like a flat grass disc.
+  const path = new THREE.Mesh(
+    new THREE.RingGeometry(GameState.islandRadius * 0.26, GameState.islandRadius * 0.50, 72),
+    new THREE.MeshStandardMaterial({
+      color:0xE7D5A1,
+      roughness:1.0,
+      metalness:0.0,
+      side:THREE.DoubleSide
+    })
+  );
+  path.rotation.x = -Math.PI/2;
+  path.position.y = 0.012;
+  islandGroup.add(path);
+
+  function makeRuneStone(x, z, scale = 1, rot = 0){
+    const g = new THREE.Group();
+    const baseMat = new THREE.MeshStandardMaterial({ color:0x7E715A, roughness:1.0, flatShading:true });
+    const glowMat = new THREE.MeshStandardMaterial({
+      color:0xFFE4A8,
+      emissive:0xFFE4A8,
+      emissiveIntensity:0.18,
+      roughness:0.75
+    });
+
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.42, 6), baseMat);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.10, 8, 6), glowMat);
+    cap.position.y = 0.28;
+
+    g.add(base, cap);
+    g.position.set(x, 0, z);
+    g.rotation.y = rot;
+    g.scale.setScalar(scale);
+    g.traverse(o => { if(o.isMesh) o.castShadow = true; });
+    islandGroup.add(g);
+    return g;
+  }
+
+  function makePebbleCluster(x, z, scale = 1){
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color:0x867B67, roughness:1.0, flatShading:true });
+    const offsets = [
+      [0,0,0.12],
+      [0.22,0.03,0.08],
+      [-0.18,-0.02,0.09],
+    ];
+    offsets.forEach(([ox, oy, s])=>{
+      const pebble = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.12 * s * scale, 0),
+        mat
+      );
+      pebble.position.set(ox * scale, oy, (ox*0.35) * scale);
+      pebble.rotation.set(Math.random()*0.8, Math.random()*0.8, Math.random()*0.8);
+      g.add(pebble);
+    });
+    g.position.set(x, 0, z);
+    g.traverse(o => { if(o.isMesh) o.castShadow = true; });
+    islandGroup.add(g);
+    return g;
+  }
+
+  function makeFlowerPatch(x, z, petals = 5){
+    const g = new THREE.Group();
+    const stemMat = new THREE.MeshStandardMaterial({ color:0x73B46B, roughness:1.0 });
+    const petalColors = [0xFF8FB1, 0xFFD86B, 0x8EDCFF, 0xC997FF];
+
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.18, 5), stemMat);
+    stem.position.y = 0.09;
+    g.add(stem);
+
+    for(let i=0;i<petals;i++){
+      const ang = (Math.PI * 2 * i) / petals;
+      const petal = new THREE.Mesh(
+        new THREE.SphereGeometry(0.05, 7, 7),
+        new THREE.MeshStandardMaterial({
+          color: petalColors[i % petalColors.length],
+          roughness:0.75
+        })
+      );
+      petal.position.set(Math.cos(ang) * 0.07, 0.19, Math.sin(ang) * 0.07);
+      g.add(petal);
+    }
+    const center = new THREE.Mesh(
+      new THREE.SphereGeometry(0.04, 8, 8),
+      new THREE.MeshStandardMaterial({ color:0xFFF0A2, emissive:0xFFF0A2, emissiveIntensity:0.12 })
+    );
+    center.position.y = 0.2;
+    g.add(center);
+
+    g.position.set(x,0,z);
+    g.traverse(o => { if(o.isMesh) o.castShadow = true; });
+    islandGroup.add(g);
+    return g;
+  }
+
+  makeRuneStone(-2.2, 1.8, 1.15, 0.4);
+  makeRuneStone(1.7, -1.6, 0.95, -0.6);
+  makeRuneStone(0.4, 2.6, 1.0, 1.1);
+  makePebbleCluster(-4.8, 0.9, 1.15);
+  makePebbleCluster(4.2, -1.8, 1.0);
+  makeFlowerPatch(-6.2, 2.8, 5);
+  makeFlowerPatch(5.8, 3.4, 6);
+  makeFlowerPatch(-1.4, -5.5, 5);
+  makeFlowerPatch(2.1, 5.9, 6);
 
   const waterGeo = new THREE.CircleGeometry(52, 48); // widened to match the larger island (was 34)
   const waterMat = new THREE.MeshStandardMaterial({ color:0x5FC7E8, roughness:0.35, metalness:0.05 });
@@ -2092,6 +2455,7 @@
     renderPartyStrip();
     renderProgressPanel();
     if(inventoryOpen) renderInventory(); // keep inventory panel in sync if it's open while things change
+    if(indexOpen) renderIndex();
     // refreshHud already runs after every capture, deploy/recall toggle,
     // sale, stage-up, luck-up, and theft, so hooking the autosave here
     // covers all of them in one place.
@@ -2104,7 +2468,8 @@
     stageCostValEl.textContent = formatCoinAmount(sCost)+' コイン';
     stageBtnEl.disabled = GameState.coins < sCost;
 
-    luckValEl.textContent = formatMultiplierAmount(luckMultiplier());
+    const luckBand = getLuckBand(luckMultiplier());
+    luckValEl.textContent = formatMultiplierAmount(luckMultiplier()) + ' / ' + luckBand.label;
     const lCost = luckUpgradeCost();
     luckCostValEl.textContent = formatCoinAmount(lCost)+' コイン';
     luckBtnEl.disabled = GameState.coins < lCost;
@@ -2136,7 +2501,7 @@
     }
     GameState.coins -= cost;
     GameState.luckLevel += 1;
-    showBanner(`永続ラック ${formatMultiplierAmount(luckMultiplier())}!`, 'rare');
+    showBanner(`永続ラック ${formatMultiplierAmount(luckMultiplier())} (${getLuckBand(luckMultiplier()).label})!`, 'rare');
     refreshHud();
   }
 
@@ -2443,6 +2808,14 @@
   const recallAllBtn = document.getElementById('recall-all-btn');
   const monsterCountPill = document.getElementById('monster-count-pill');
 
+  const indexBtn = document.getElementById('index-btn');
+  const indexOverlay = document.getElementById('index-overlay');
+  const indexClose = document.getElementById('index-close');
+  const indexSummary = document.getElementById('index-summary');
+  const indexSearch = document.getElementById('index-search');
+  const indexRarityList = document.getElementById('index-rarity-list');
+  const indexOwnedList = document.getElementById('index-owned-list');
+
   function openInventory(){
     inventoryOpen = true;
     inventoryOverlay.style.display = 'flex';
@@ -2505,6 +2878,123 @@
     });
   }
 
+
+  let indexOpen = false;
+
+  function openIndex(){
+    indexOpen = true;
+    indexOverlay.style.display = 'flex';
+    renderIndex();
+  }
+  function closeIndex(){
+    indexOpen = false;
+    indexOverlay.style.display = 'none';
+  }
+
+  function getOwnedMonsterCounts(){
+    const map = new Map();
+    GameState.party.forEach(p=>{
+      if(!map.has(p.defId)){
+        map.set(p.defId, { defId:p.defId, count:0 });
+      }
+      map.get(p.defId).count += 1;
+    });
+    return [...map.values()].map(entry=>{
+      const def = MONSTER_DEFS.find(d=>d.id===entry.defId);
+      return def ? { def, count:entry.count } : null;
+    }).filter(Boolean);
+  }
+
+  function renderIndex(){
+    const stats = calculateMonsterRollStats();
+    const filter = (indexSearch.value || '').trim().toLowerCase();
+
+    const owned = getOwnedMonsterCounts()
+      .filter(({def})=>{
+        if(!filter) return true;
+        return (
+          (def.name || '').toLowerCase().includes(filter) ||
+          (def.nameJp || '').toLowerCase().includes(filter) ||
+          (RARITY_INFO[def.rarity]?.jp || '').toLowerCase().includes(filter) ||
+          def.rarity.includes(filter)
+        );
+      })
+      .sort((a,b)=>{
+        const c = a.def.rarity.localeCompare(b.def.rarity);
+        if(c !== 0) return c;
+        return a.def.id - b.def.id;
+      });
+
+    const rarityRows = RARITY_ORDER.map(rarity=>{
+      const rr = RARITY_INFO[rarity];
+      if(!rr) return null;
+      const pack = stats.byRarity[rarity] || { effectiveWeight:0, count:0 };
+      const chance = stats.effectiveTotal > 0 ? (pack.effectiveWeight / stats.effectiveTotal) : 0;
+      return { rarity, rr, chance, count: pack.count };
+    }).filter(Boolean);
+
+    indexSummary.innerHTML =
+      `現在 ${MONSTER_DEFS.length} 種 / ${RARITY_ORDER.length} レア度 · ` +
+      `所持モンスター合計の抽選率 ${formatChanceLabel(owned.reduce((sum, item)=>{
+        const pack = stats.perMonster.find(x=>x.def.id===item.def.id);
+        return sum + (pack ? (pack.effectiveWeight / stats.effectiveTotal) : 0);
+      }, 0))} · ` +
+      `ラック値 ${formatMultiplierAmount(luckMultiplier())}`;
+
+    indexRarityList.innerHTML = '';
+    rarityRows.forEach(row=>{
+      const el = document.createElement('div');
+      el.className = 'index-row';
+      el.innerHTML = `
+        <div class="left">
+          <div class="name">${row.rr.jp}<span class="rarity-chip" style="background:${row.rr.col}">${row.rarity}</span></div>
+          <div class="sub">${row.count}体 / 現在補正込み</div>
+        </div>
+        <div class="right">
+          <div class="chance">${formatChanceLabel(row.chance)}</div>
+          <div class="small">1回あたり</div>
+        </div>
+      `;
+      indexRarityList.appendChild(el);
+    });
+    if(rarityRows.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'index-empty';
+      empty.textContent = 'レアリティデータがありません';
+      indexRarityList.appendChild(empty);
+    }
+
+    indexOwnedList.innerHTML = '';
+    if(owned.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'index-empty';
+      empty.textContent = GameState.party.length === 0 ? 'まだモンスターを持っていません。' : '検索条件に一致する所持モンスターがありません。';
+      indexOwnedList.appendChild(empty);
+      return;
+    }
+
+    owned.forEach(item=>{
+      const def = item.def;
+      const pack = stats.perMonster.find(x=>x.def.id===def.id);
+      const chance = stats.effectiveTotal > 0 && pack ? (pack.effectiveWeight / stats.effectiveTotal) : 0;
+      const rr = RARITY_INFO[def.rarity];
+      const deployedCount = GameState.party.filter(p=>p.defId===def.id && p.deployed).length;
+      const el = document.createElement('div');
+      el.className = 'index-row';
+      el.innerHTML = `
+        <div class="left">
+          <div class="name">${def.nameJp} <span class="rarity-chip" style="background:${rr.col}">${rr.jp}</span></div>
+          <div class="sub">所持 ${item.count}体${deployedCount ? ` / 出陣 ${deployedCount}体` : ''} / ${def.name}</div>
+        </div>
+        <div class="right">
+          <div class="chance">${formatChanceLabel(chance)}</div>
+          <div class="small">1回で引く確率</div>
+        </div>
+      `;
+      indexOwnedList.appendChild(el);
+    });
+  }
+
   inventoryBtn.addEventListener('click', openInventory);
   monsterCountPill.addEventListener('click', openInventory);
   inventoryClose.addEventListener('click', closeInventory);
@@ -2513,6 +3003,13 @@
   });
   deployAllBtn.addEventListener('click', deployAll);
   recallAllBtn.addEventListener('click', recallAll);
+
+  indexBtn.addEventListener('click', openIndex);
+  indexClose.addEventListener('click', closeIndex);
+  indexOverlay.addEventListener('click', (e)=>{
+    if(e.target === indexOverlay) closeIndex();
+  });
+  indexSearch.addEventListener('input', renderIndex);
 
   /* =========================================================
      MOUND LIFECYCLE
