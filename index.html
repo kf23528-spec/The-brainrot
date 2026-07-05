@@ -1,0 +1,3105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Pick Up Monster</title>
+<style>
+  :root{
+    --cream:#FFF8EE;
+    --purple:#7C5CFC;
+    --purple-dark:#5B3FE0;
+    --pink:#FF8FAB;
+    --green:#4FCE73;
+    --ink:#2D2A4A;
+    --ink-soft:#5B5779;
+    --warn:#FF5D6C;
+    --white:#FFFFFF;
+    --gold:#F5B90D;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    overflow:hidden; overscroll-behavior:none;
+    background:var(--cream);
+    font-family:'Baloo 2','Hiragino Maru Gothic ProN','Rounded Mplus 1c',system-ui,sans-serif;
+    color:var(--ink);
+    touch-action:none;
+    user-select:none;
+  }
+  #canvas-wrap{ position:fixed; inset:0; }
+  canvas{ display:block; width:100%; height:100%; }
+
+  /* ---------- Top HUD ---------- */
+  #hud-top{
+    position:fixed; top:0; left:0; right:0;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding: max(14px, env(safe-area-inset-top)) 16px 0 16px;
+    pointer-events:none;
+    z-index:10;
+  }
+  .pill{
+    background:var(--white);
+    border-radius:999px;
+    padding:9px 16px;
+    display:flex; align-items:center; gap:7px;
+    box-shadow:0 4px 0 rgba(45,42,74,0.12), 0 8px 20px rgba(45,42,74,0.08);
+    font-weight:700;
+    font-size:16px;
+    pointer-events:auto;
+  }
+  #coin-pill{ color:#B9860B; }
+  #coin-pill .ico{ width:20px; height:20px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #FFE281, #F5B90D 70%);
+    box-shadow: inset 0 -2px 3px rgba(0,0,0,0.15);
+    flex:none;
+  }
+  #monster-count-pill{ color:var(--purple-dark); cursor:pointer; }
+  #monster-count-pill .ico{ font-size:16px; }
+
+  #title-badge{
+    position:fixed; top: max(14px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
+    background:var(--purple);
+    color:white; font-weight:800; letter-spacing:0.5px;
+    padding:8px 20px; border-radius:999px;
+    font-size:14px;
+    box-shadow:0 4px 0 var(--purple-dark), 0 8px 18px rgba(124,92,252,0.35);
+    z-index:9;
+    pointer-events:none;
+    white-space:nowrap;
+  }
+
+  /* ---------- Banner ---------- */
+  #banner-wrap{
+    position:fixed; top:74px; left:0; right:0;
+    display:flex; justify-content:center;
+    z-index:11; pointer-events:none;
+  }
+  .banner{
+    background:var(--warn); color:white; font-weight:800; font-size:14px;
+    padding:9px 18px; border-radius:15px;
+    box-shadow:0 6px 16px rgba(255,93,108,0.4);
+    animation: bannerIn 0.35s cubic-bezier(.34,1.56,.64,1) both;
+    white-space:nowrap;
+    max-width:88vw; overflow:hidden; text-overflow:ellipsis;
+  }
+  .banner.good{ background:var(--green); box-shadow:0 6px 16px rgba(79,206,115,0.4); }
+  .banner.rare{ background:linear-gradient(90deg,#9B6EFF,#FF6EC7); box-shadow:0 6px 16px rgba(155,110,255,0.5); }
+  @keyframes bannerIn{
+    0%{ transform:translateY(-30px) scale(0.8); opacity:0; }
+    100%{ transform:translateY(0) scale(1); opacity:1; }
+  }
+
+  #popup-layer{ position:fixed; inset:0; pointer-events:none; z-index:8; overflow:hidden; }
+  .popup{
+    position:absolute;
+    font-weight:800; font-size:14px; color:#B9860B;
+    text-shadow:0 1px 0 white, 0 2px 4px rgba(0,0,0,0.15);
+    animation: popUp 0.9s ease-out forwards;
+  }
+  @keyframes popUp{
+    0%{ transform:translate(-50%,-50%) translateY(0); opacity:1; }
+    100%{ transform:translate(-50%,-50%) translateY(-46px); opacity:0; }
+  }
+
+  /* ---------- Crosshair ---------- */
+  #crosshair{
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:8px; height:8px; border-radius:50%;
+    background:rgba(255,255,255,0.85);
+    box-shadow:0 0 0 2px rgba(45,42,74,0.35);
+    z-index:9; pointer-events:none;
+  }
+
+  /* ---------- Virtual joystick (left) ---------- */
+  #joystick-zone{
+    position:fixed; left:0; bottom:0; width:45%; height:55%;
+    z-index:6; touch-action:none;
+  }
+  #joystick-base{
+    position:fixed; width:108px; height:108px; border-radius:50%;
+    background:rgba(45,42,74,0.14);
+    border:2px solid rgba(45,42,74,0.18);
+    display:none; z-index:7; pointer-events:none;
+  }
+  #joystick-stick{
+    position:fixed; width:52px; height:52px; border-radius:50%;
+    background:rgba(124,92,252,0.85);
+    box-shadow:0 3px 8px rgba(45,42,74,0.25);
+    display:none; z-index:7; pointer-events:none;
+  }
+
+  /* ---------- Look zone (right) ---------- */
+  #look-zone{
+    position:fixed; right:0; bottom:0; width:55%; height:100%;
+    z-index:5; touch-action:none;
+  }
+
+  /* ---------- Mound hold prompt ---------- */
+  #mound-prompt{
+    position:fixed; left:50%; bottom:150px; transform:translate(-50%,0);
+    display:none; flex-direction:column; align-items:center; gap:8px;
+    z-index:12; pointer-events:none;
+  }
+  #mound-prompt .label{
+    background:rgba(45,42,74,0.85); color:white; font-weight:700; font-size:13px;
+    padding:6px 14px; border-radius:12px;
+  }
+  #mound-ring-wrap{ width:74px; height:74px; }
+  #mound-ring-wrap svg{ transform:rotate(-90deg); }
+  #mound-ring-bg{ fill:none; stroke:rgba(45,42,74,0.15); stroke-width:8; }
+  #mound-ring-fg{ fill:none; stroke:var(--purple); stroke-width:8; stroke-linecap:round;
+    stroke-dasharray:207; stroke-dashoffset:207; transition:stroke-dashoffset 0.05s linear;
+  }
+  #mound-timing-track{
+    position:relative; width:118px; height:12px; border-radius:999px;
+    background:rgba(45,42,74,0.15); overflow:hidden;
+    box-shadow:inset 0 1px 2px rgba(0,0,0,0.12);
+  }
+  #mound-timing-target{
+    position:absolute; top:0; bottom:0; left:40%; width:20%;
+    background:rgba(79,206,115,0.85); border-radius:999px;
+  }
+  #mound-timing-needle{
+    position:absolute; top:-2px; width:4px; height:16px; left:0;
+    transform:translateX(-50%);
+    border-radius:999px; background:var(--warn);
+    box-shadow:0 0 0 2px rgba(255,255,255,0.55);
+  }
+  #mound-action-btn{
+    border:none;
+    border-radius:16px;
+    padding:12px 18px;
+    font-weight:900;
+    font-size:14px;
+    color:white;
+    background:linear-gradient(180deg, #7C5CFC, #5B3FE0);
+    box-shadow:0 4px 0 #4A30C7, 0 8px 18px rgba(124,92,252,0.28);
+    pointer-events:auto;
+    min-width:140px;
+    touch-action:none;
+  }
+  #mound-action-btn:active{
+    transform:translateY(2px);
+    box-shadow:0 2px 0 #4A30C7, 0 5px 12px rgba(124,92,252,0.22);
+  }
+  /* ---------- Battle overlay ---------- */
+  #battle-overlay{
+    position:fixed; inset:0; z-index:20;
+    display:none; align-items:center; justify-content:center;
+    background:rgba(20,16,40,0.55);
+    pointer-events:none;
+  }
+  #battle-card{
+    background:var(--white); border-radius:24px; padding:22px 26px;
+    width:min(86vw, 460px);
+    box-shadow:0 20px 50px rgba(0,0,0,0.35);
+    pointer-events:auto;
+  }
+  #battle-card h3{ margin:0 0 14px; text-align:center; font-size:18px; color:var(--ink); }
+  .battle-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+  .battle-mon{ flex:1; text-align:center; }
+  .battle-mon .swatch{ width:56px; height:56px; border-radius:50%; margin:0 auto 6px; box-shadow:inset 0 -6px 10px rgba(0,0,0,0.15); }
+  .battle-mon .nm{ font-size:12px; font-weight:800; color:var(--ink); }
+  .battle-mon .rr{ font-size:10px; font-weight:700; opacity:0.6; }
+  .battle-vs{ font-weight:900; color:var(--warn); font-size:15px; }
+  #battle-log{ font-size:13px; color:var(--ink-soft); text-align:center; min-height:20px; margin-top:8px; font-weight:600; }
+  #battle-result{ text-align:center; font-weight:800; font-size:16px; margin-top:10px; min-height:22px; }
+
+  /* ---------- Party strip (bottom, small icons of monsters currently marching with you) ---------- */
+  #party-strip{
+    position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
+    display:flex; gap:6px; z-index:9; pointer-events:none;
+    max-width:92vw; overflow:hidden;
+    padding:6px 10px; background:rgba(255,255,255,0.55); border-radius:16px;
+  }
+  .party-icon{
+    width:30px; height:30px; border-radius:50%; flex:none;
+    box-shadow:inset 0 -4px 6px rgba(0,0,0,0.18), 0 2px 4px rgba(0,0,0,0.15);
+    border:2px solid rgba(255,255,255,0.9);
+  }
+  .party-icon.leader{ border-color:var(--gold); box-shadow:inset 0 -4px 6px rgba(0,0,0,0.18), 0 0 0 2px var(--gold); }
+
+  #hint{
+    position:fixed; top:120px; left:50%; transform:translateX(-50%);
+    background:rgba(45,42,74,0.85); color:white; font-size:13px; font-weight:600;
+    padding:9px 16px; border-radius:13px;
+    z-index:9; pointer-events:none;
+    transition:opacity 0.4s ease;
+    text-align:center; max-width:80vw;
+  }
+
+  #loading{
+    position:fixed; inset:0; background:var(--cream);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:100; gap:14px;
+    transition:opacity 0.5s ease;
+  }
+  #loading .blob{
+    width:64px; height:64px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #B79CFF, var(--purple) 75%);
+    animation:loadBounce 0.6s ease-in-out infinite alternate;
+  }
+  @keyframes loadBounce{ 0%{ transform:translateY(0) scaleY(1);} 100%{ transform:translateY(-18px) scaleY(1.08);} }
+  #loading p{ font-weight:700; color:var(--ink-soft); font-size:15px; }
+
+  /* ---------- Inventory button + panel ---------- */
+  #inventory-btn{
+    position:fixed; right:16px; bottom:150px;
+    z-index:9; pointer-events:auto;
+    background:var(--purple); color:white; font-weight:800; font-size:13px;
+    padding:11px 16px; border-radius:16px;
+    box-shadow:0 4px 0 var(--purple-dark), 0 8px 16px rgba(124,92,252,0.35);
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    border:none;
+  }
+  #inventory-btn .big{ font-size:20px; line-height:1; }
+
+  #inventory-overlay{
+    position:fixed; inset:0; z-index:30;
+    display:none; align-items:flex-end; justify-content:center;
+    background:rgba(20,16,40,0.5);
+  }
+  #inventory-panel{
+    background:var(--cream); width:100%; max-width:520px;
+    height:min(76vh, 640px);
+    border-radius:26px 26px 0 0;
+    box-shadow:0 -10px 40px rgba(0,0,0,0.35);
+    display:flex; flex-direction:column;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+    overflow:hidden;
+  }
+  #inventory-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 18px 10px 18px;
+  }
+  #inventory-head h3{ margin:0; font-size:17px; color:var(--ink); }
+  #inventory-close{
+    background:rgba(45,42,74,0.1); border:none; border-radius:50%;
+    width:32px; height:32px; font-size:16px; font-weight:800; color:var(--ink);
+  }
+  #inventory-sub{
+    padding:0 18px 10px 18px; font-size:12px; color:var(--ink-soft); font-weight:600;
+  }
+  #inventory-grid{
+    flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    padding:6px 14px 14px 14px;
+    display:grid; grid-template-columns:repeat(4,1fr); gap:10px;
+    align-content:start;
+  }
+  .inv-card{
+    background:white; border-radius:16px; padding:9px 6px 8px;
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    box-shadow:0 3px 0 rgba(45,42,74,0.08), 0 4px 10px rgba(45,42,74,0.06);
+    position:relative;
+    border:2px solid transparent;
+  }
+  .inv-card.deployed{ border-color:var(--green); }
+  .inv-card .orb{
+    width:44px; height:44px; border-radius:50%;
+    box-shadow:inset 0 -6px 8px rgba(0,0,0,0.18);
+  }
+  .inv-card .nm{ font-size:10.5px; font-weight:800; color:var(--ink); text-align:center; line-height:1.2; }
+  .inv-card .rr{ font-size:8.5px; font-weight:700; }
+  .inv-card .deployed-tag{
+    position:absolute; top:4px; right:4px;
+    background:var(--green); color:white; font-size:8px; font-weight:800;
+    border-radius:6px; padding:1px 4px;
+  }
+  .inv-card .coinval{
+    font-size:8.5px; font-weight:700; color:#B9860B;
+  }
+  .inv-card .income{
+    font-size:8.1px; font-weight:700; color:#5B5779; line-height:1.1;
+    text-align:center;
+  }
+  .inv-card .lvl,
+  .inv-card .upgrade-cost{
+    font-size:8px; font-weight:800; line-height:1.1; text-align:center;
+  }
+  .inv-card .lvl{ color:var(--purple-dark); }
+  .inv-card .upgrade-cost{ color:#7B5C10; }
+  .inv-card .upgrade-btn,
+  .inv-card .sell-btn{
+    width:100%; border:none; border-radius:8px;
+    color:white; font-weight:800; font-size:9px;
+    padding:4px 2px;
+  }
+  .inv-card .upgrade-btn{ background:var(--green); }
+  .inv-card .sell-btn{
+    margin-top:2px; width:100%; border:none; border-radius:8px;
+    background:var(--warn); color:white; font-weight:800; font-size:9.5px;
+    padding:4px 2px;
+  }
+  #inventory-empty{
+    text-align:center; color:var(--ink-soft); font-weight:600; font-size:13px;
+    padding:40px 20px; grid-column: 1/-1;
+  }
+  #inventory-actions{
+    padding:10px 18px 4px 18px; display:flex; gap:8px;
+  }
+  .inv-btn{
+    flex:1; border:none; border-radius:14px; padding:12px 10px; font-weight:800; font-size:13px;
+    box-shadow:0 3px 0 rgba(0,0,0,0.15);
+  }
+  #deploy-all-btn{ background:var(--green); color:white; }
+  #recall-all-btn{ background:white; color:var(--ink); box-shadow:0 3px 0 rgba(45,42,74,0.1); }
+
+  /* ---------- Stage / Luck panel (bottom-left) ---------- */
+  #progress-panel{
+    position:fixed; left:16px; bottom:150px;
+    z-index:9; pointer-events:auto;
+    display:flex; flex-direction:column; gap:8px;
+    max-width:210px;
+  }
+  .prog-card{
+    background:var(--white); border-radius:16px; padding:9px 12px;
+    box-shadow:0 4px 0 rgba(45,42,74,0.1), 0 6px 14px rgba(45,42,74,0.08);
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .prog-card .row1{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .prog-card .label{ font-size:11px; font-weight:800; color:var(--ink-soft); }
+  .prog-card .value{ font-size:14px; font-weight:900; }
+  .prog-card.stage .value{ color:var(--purple-dark); }
+  .prog-card.luck .value{ color:#E0790F; }
+  .prog-btn{
+    border:none; border-radius:10px; padding:7px 8px; font-weight:800; font-size:11.5px;
+    color:white; box-shadow:0 3px 0 rgba(0,0,0,0.15);
+  }
+  .prog-btn.stagebtn{ background:var(--purple); }
+  .prog-btn.luckbtn{ background:#F5B90D; color:#5C3D00; box-shadow:0 3px 0 rgba(0,0,0,0.12); }
+  .prog-btn:disabled{ opacity:0.45; }
+  .prog-card .cost{ font-size:10px; font-weight:700; color:var(--ink-soft); text-align:right; }
+
+  /* rarity color helpers used inline via JS style, kept here for reference only */
+
+  #capture-fx-layer{
+    position:fixed; inset:0; z-index:34; pointer-events:none; overflow:hidden;
+  }
+  .capture-fx{
+    position:absolute; inset:0;
+    display:block;
+    pointer-events:none;
+  }
+  .capture-fx .flash{
+    position:absolute; left:50%; top:50%;
+    width:120px; height:120px; margin-left:-60px; margin-top:-60px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(255,255,255,0.98) 0%, rgba(255,255,255,0.65) 28%, rgba(255,255,255,0.0) 72%);
+    filter:blur(1px);
+    animation:captureFlash 900ms ease-out forwards;
+  }
+  .capture-fx .ring{
+    position:absolute; left:50%; top:50%;
+    width:70px; height:70px; margin-left:-35px; margin-top:-35px;
+    border-radius:50%;
+    border:4px solid rgba(255,255,255,0.9);
+    box-shadow:0 0 24px currentColor;
+    animation:captureRing 1100ms ease-out forwards;
+  }
+  .capture-fx .particle{
+    position:absolute; left:50%; top:50%;
+    width:10px; height:10px; margin-left:-5px; margin-top:-5px;
+    border-radius:50%;
+    background:currentColor;
+    box-shadow:0 0 10px currentColor;
+    animation:captureParticle var(--dur) cubic-bezier(.18,.89,.23,1.22) forwards;
+    transform:translate(0,0) scale(var(--scale));
+  }
+  .capture-fx .star{
+    position:absolute; left:50%; top:50%;
+    width:12px; height:12px; margin-left:-6px; margin-top:-6px;
+    background:currentColor;
+    clip-path:polygon(50% 0%, 61% 35%, 98% 35%, 69% 57%, 79% 91%, 50% 70%, 21% 91%, 31% 57%, 2% 35%, 39% 35%);
+    filter:drop-shadow(0 0 8px currentColor);
+    animation:captureStar var(--dur) ease-out forwards;
+  }
+  .capture-fx .chance-badge{
+    position:absolute;
+    left:50%;
+    top:calc(50% + 96px);
+    transform:translateX(-50%);
+    min-width:110px;
+    padding:7px 12px;
+    border-radius:999px;
+    color:#fff;
+    font-weight:900;
+    font-size:14px;
+    letter-spacing:0.3px;
+    text-align:center;
+    backdrop-filter:blur(3px);
+    animation:captureChanceBadge var(--dur) ease-out forwards;
+    text-shadow:0 1px 0 rgba(0,0,0,0.2);
+    line-height:1.08;
+  }
+  .capture-fx .chance-badge .pct{ display:block; }
+  .capture-fx .chance-badge .odds{
+    display:block;
+    margin-top:3px;
+    font-size:10px;
+    font-weight:800;
+    opacity:0.95;
+    letter-spacing:0;
+  }
+  @keyframes captureFlash{
+    0%{ transform:scale(0.2); opacity:0; }
+    12%{ opacity:1; }
+    100%{ transform:scale(1.9); opacity:0; }
+  }
+  @keyframes captureRing{
+    0%{ transform:scale(0.3); opacity:0; }
+    20%{ opacity:1; }
+    100%{ transform:scale(3.3); opacity:0; }
+  }
+  @keyframes captureParticle{
+    0%{ transform:translate(0,0) scale(var(--scale)); opacity:0; }
+    12%{ opacity:1; }
+    100%{ transform:translate(var(--dx), var(--dy)) scale(0.15); opacity:0; }
+  }
+  @keyframes captureStar{
+    0%{ transform:translate(0,0) scale(0.3) rotate(0deg); opacity:0; }
+    12%{ opacity:1; }
+    100%{ transform:translate(var(--dx), var(--dy)) scale(0.1) rotate(360deg); opacity:0; }
+  }
+
+  .prog-card.party .value{ color:#EF6C00; }
+  .prog-btn.partybtn{ background:#FF7A59; color:white; box-shadow:0 3px 0 rgba(0,0,0,0.15); }
+
+  .capture-fx .chance-badge.center-rush{
+    top:50%;
+    transform:translate(-50%, -50%);
+    min-width:240px;
+    padding:14px 18px;
+    font-size:28px;
+    letter-spacing:1px;
+    font-weight:900;
+    text-align:center;
+    box-shadow:0 0 26px rgba(255,255,255,0.22), 0 0 22px currentColor, 0 14px 28px rgba(0,0,0,0.2);
+    text-shadow:0 2px 0 rgba(0,0,0,0.28);
+    backdrop-filter:blur(6px);
+    animation:captureChanceBadgeCenter var(--dur) ease-out forwards;
+  }
+  .capture-fx .chance-badge.center-rush .pct{ font-size:28px; }
+  .capture-fx .chance-badge.center-rush .odds{ font-size:12px; }
+  @keyframes captureChanceBadgeCenter{
+    0%{ transform:translate(-50%, -50%) scale(0.8); opacity:0; }
+    10%{ opacity:1; }
+    100%{ transform:translate(-50%, -50%) scale(1); opacity:1; }
+  }
+
+  #admin-overlay{
+    position:fixed; inset:0; z-index:45;
+    display:none; align-items:center; justify-content:center;
+    background:rgba(20,16,40,0.65);
+    backdrop-filter:blur(4px);
+    padding:18px;
+  }
+  #admin-panel{
+    width:min(94vw, 760px);
+    max-height:min(88vh, 760px);
+    overflow:auto;
+    background:var(--cream);
+    border-radius:26px;
+    box-shadow:0 24px 60px rgba(0,0,0,0.45);
+    padding:18px;
+  }
+  #admin-panel h3{ margin:0 0 8px; font-size:18px; text-align:center; }
+  #admin-panel .hint{ text-align:center; font-size:12px; color:var(--ink-soft); font-weight:700; margin-bottom:12px; }
+  .admin-top{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    margin-bottom:12px;
+  }
+  .admin-close{
+    border:none; background:rgba(45,42,74,0.1); color:var(--ink); border-radius:50%;
+    width:34px; height:34px; font-weight:900; font-size:16px;
+  }
+  .admin-grid{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0,1fr));
+    gap:12px;
+  }
+  .admin-section{
+    background:white;
+    border-radius:18px;
+    padding:12px;
+    box-shadow:0 4px 12px rgba(45,42,74,0.08);
+  }
+  .admin-section h4{ margin:0 0 10px; font-size:14px; color:var(--ink); }
+  .admin-row{
+    display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    margin-bottom:8px;
+  }
+  .admin-row:last-child{ margin-bottom:0; }
+  .admin-input, .admin-select{
+    border:2px solid rgba(45,42,74,0.12);
+    border-radius:12px;
+    padding:10px 12px;
+    font-size:14px;
+    font-weight:700;
+    background:white;
+    color:var(--ink);
+    min-width:0;
+  }
+  .admin-input{ width:120px; }
+  .admin-input.wide{ width:100%; }
+  .admin-select{ width:100%; }
+  .admin-btn{
+    border:none;
+    border-radius:12px;
+    padding:10px 12px;
+    font-size:13px;
+    font-weight:800;
+    color:white;
+    background:var(--purple);
+    box-shadow:0 3px 0 var(--purple-dark);
+  }
+  .admin-btn.good{ background:var(--green); box-shadow:0 3px 0 #2A9150; }
+  .admin-btn.warn{ background:var(--warn); box-shadow:0 3px 0 #C43B49; }
+  .admin-btn.gold{ background:var(--gold); color:#5C3D00; box-shadow:0 3px 0 #C08C08; }
+  .admin-btn.gray{ background:#6B7280; box-shadow:0 3px 0 #4B5563; }
+  .admin-list{
+    max-height:260px;
+    overflow:auto;
+    border:2px solid rgba(45,42,74,0.08);
+    border-radius:12px;
+    padding:6px;
+    background:#FCFCFF;
+  }
+  .admin-list button{
+    width:100%;
+    text-align:left;
+    border:none;
+    background:white;
+    border-radius:10px;
+    padding:8px 10px;
+    margin-bottom:6px;
+    font-weight:700;
+    color:var(--ink);
+    box-shadow:0 2px 0 rgba(45,42,74,0.08);
+  }
+  .admin-list button.active{
+    outline:2px solid var(--purple);
+    background:#F3EEFF;
+  }
+  .admin-stat{
+    font-size:12px;
+    color:var(--ink-soft);
+    font-weight:700;
+  }
+  @media (max-width: 680px){
+    .admin-grid{ grid-template-columns:1fr; }
+  }
+
+
+  /* ---------- Admin entry + code prompt ---------- */
+  #admin-open-btn{
+    position:fixed; right:16px; top:max(14px, env(safe-area-inset-top));
+    z-index:32; border:none; width:42px; height:42px; border-radius:50%;
+    background:var(--purple); color:white; font-size:20px; font-weight:900;
+    box-shadow:0 4px 0 var(--purple-dark), 0 8px 16px rgba(124,92,252,0.35);
+  }
+  #admin-code-overlay{
+    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(20,16,40,0.45); z-index:39;
+  }
+  #admin-code-panel{
+    width:min(86vw, 360px); background:var(--white); border-radius:22px; padding:18px 16px 16px;
+    box-shadow:0 20px 50px rgba(0,0,0,0.35); text-align:center;
+  }
+  #admin-code-panel h3{ margin:0 0 8px; font-size:18px; }
+  #admin-code-panel p{ margin:0 0 12px; font-size:12px; color:var(--ink-soft); font-weight:700; }
+  #admin-code-input{
+    width:100%; border:2px solid rgba(45,42,74,0.14); border-radius:14px; padding:12px 14px;
+    font-size:18px; font-weight:800; letter-spacing:2px; text-align:center; outline:none;
+  }
+  .admin-code-actions{ display:flex; gap:8px; margin-top:12px; }
+  .admin-code-actions button{
+    flex:1; border:none; border-radius:12px; padding:11px 12px; font-size:14px; font-weight:900;
+    color:white; background:var(--purple); box-shadow:0 3px 0 var(--purple-dark);
+  }
+  #admin-code-cancel{ background:#6B7280; box-shadow:0 3px 0 #4B5563; }
+
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="blob"></div><p>島を準備中…</p></div>
+
+<div id="canvas-wrap"></div>
+<div id="popup-layer"></div>
+<div id="capture-fx-layer"></div>
+<div id="crosshair"></div>
+
+<div id="title-badge">🏝️ PICK UP MONSTER</div>
+<button id="admin-open-btn" aria-label="管理者コード" title="管理者コード">⚙</button>
+
+<div id="admin-code-overlay">
+  <div id="admin-code-panel">
+    <h3>管理者コード</h3>
+    <p>コードを入力すると管理者パネルが開きます。</p>
+    <input id="admin-code-input" type="text" inputmode="numeric" maxlength="8" placeholder="49763145">
+    <div class="admin-code-actions">
+      <button id="admin-code-cancel">キャンセル</button>
+      <button id="admin-code-submit">開く</button>
+    </div>
+  </div>
+</div>
+
+
+<div id="hud-top">
+  <div class="pill" id="coin-pill"><span class="ico"></span><span id="coin-val">0</span></div>
+  <div class="pill" id="monster-count-pill"><span class="ico">👾</span><span id="monster-val">0</span>/<span id="monster-max-val">40</span></div>
+</div>
+
+<div id="banner-wrap"></div>
+<div id="hint">右側ドラッグで視点 ・ 左スティックで移動</div>
+
+<div id="mound-prompt">
+  <div id="mound-ring-wrap">
+    <svg width="74" height="74" viewBox="0 0 74 74">
+      <circle id="mound-ring-bg" cx="37" cy="37" r="33"></circle>
+      <circle id="mound-ring-fg" cx="37" cy="37" r="33"></circle>
+    </svg>
+  </div>
+  <div id="mound-timing-track">
+    <div id="mound-timing-target"></div>
+    <div id="mound-timing-needle"></div>
+  </div>
+  <button id="mound-action-btn" type="button">タイミングよく押す</button>
+  <div class="label" id="mound-label">タイミングを合わせてボタンを押そう</div>
+</div>
+
+<div id="battle-overlay">
+  <div id="battle-card">
+    <h3>⚔️ モンスターバトル!</h3>
+    <div class="battle-row">
+      <div class="battle-mon" id="battle-mon-a">
+        <div class="swatch"></div>
+        <div class="nm">-</div>
+        <div class="rr">-</div>
+      </div>
+      <div class="battle-vs">VS</div>
+      <div class="battle-mon" id="battle-mon-b">
+        <div class="swatch"></div>
+        <div class="nm">-</div>
+        <div class="rr">-</div>
+      </div>
+    </div>
+    <div id="battle-log">戦闘準備中…</div>
+    <div id="battle-result"></div>
+  </div>
+</div>
+
+<div id="party-strip"></div>
+
+<div id="progress-panel">
+  <div class="prog-card stage">
+    <div class="row1"><span class="label">ステージ</span><span class="value" id="stage-val">1</span></div>
+    <button class="prog-btn stagebtn" id="stage-btn">次のステージへ</button>
+    <div class="cost" id="stage-cost-val">200 コイン</div>
+  </div>
+  <div class="prog-card luck">
+    <div class="row1"><span class="label">永続ラック</span><span class="value" id="luck-val">x1.00</span></div>
+    <button class="prog-btn luckbtn" id="luck-btn">ラックアップ</button>
+    <div class="cost" id="luck-cost-val">120 コイン</div>
+  </div>
+  <div class="prog-card party">
+    <div class="row1"><span class="label">最大所持</span><span class="value" id="party-limit-val">40</span></div>
+    <button class="prog-btn partybtn" id="party-limit-btn">最大所持UP</button>
+    <div class="cost" id="party-limit-cost-val">250 コイン</div>
+  </div>
+</div>
+
+<button id="inventory-btn"><span class="big">🎒</span><span>インベントリ</span></button>
+
+<div id="inventory-overlay">
+  <div id="inventory-panel">
+    <div id="inventory-head">
+      <h3>🎒 インベントリ</h3>
+      <button id="inventory-close">✕</button>
+    </div>
+    <div id="inventory-sub">出陣させたモンスターだけが一緒に歩きます・売却でコイン獲得</div>
+    <div id="inventory-grid"></div>
+    <div id="inventory-actions">
+      <button class="inv-btn" id="deploy-all-btn">全員出陣</button>
+      <button class="inv-btn" id="recall-all-btn">全員待機</button>
+    </div>
+  </div>
+</div>
+
+<div id="joystick-zone"></div>
+<div id="joystick-base"></div>
+<div id="joystick-stick"></div>
+<div id="look-zone"></div>
+
+<div id="admin-overlay">
+  <div id="admin-panel">
+    <div class="admin-top">
+      <div>
+        <h3>🛠 管理者パネル</h3>
+        <div class="hint">コード 49763145 で開く / ここでゲーム状態を直接調整できます</div>
+      </div>
+      <button class="admin-close" id="admin-close">✕</button>
+    </div>
+    <div class="admin-grid">
+      <div class="admin-section">
+        <h4>所持数と進行</h4>
+        <div class="admin-row">
+          <input id="admin-coins-input" class="admin-input" type="number" step="1" placeholder="コイン">
+          <button class="admin-btn gold" id="admin-coins-set">コイン反映</button>
+          <button class="admin-btn gray" id="admin-coins-add">+1000</button>
+        </div>
+        <div class="admin-row">
+          <input id="admin-stage-input" class="admin-input" type="number" step="1" min="1" placeholder="ステージ">
+          <button class="admin-btn good" id="admin-stage-set">ステージ反映</button>
+          <button class="admin-btn gray" id="admin-stage-next">+1</button>
+        </div>
+        <div class="admin-row">
+          <input id="admin-luck-input" class="admin-input" type="number" step="1" min="0" placeholder="ラックLv">
+          <button class="admin-btn gold" id="admin-luck-set">ラック反映</button>
+          <button class="admin-btn gray" id="admin-luck-add">+1</button>
+        </div>
+        <div class="admin-row">
+          <input id="admin-party-input" class="admin-input" type="number" step="1" min="1" placeholder="最大所持">
+          <button class="admin-btn warn" id="admin-party-set">所持上限反映</button>
+          <button class="admin-btn gray" id="admin-party-add">+5</button>
+        </div>
+      </div>
+      <div class="admin-section">
+        <h4>スポーン / お気に入りキャラ</h4>
+        <div class="admin-row">
+          <input id="admin-monster-search" class="admin-input wide" type="text" placeholder="キャラ名で検索">
+        </div>
+        <div class="admin-row">
+          <select id="admin-monster-select" class="admin-select" size="8"></select>
+        </div>
+        <div class="admin-row">
+          <button class="admin-btn good" id="admin-spawn-mound">選択キャラの土を生成</button>
+          <button class="admin-btn gold" id="admin-spawn-ready">即ゲット</button>
+          <button class="admin-btn gray" id="admin-spawn-wild">野生出現</button>
+        </div>
+        <div class="admin-stat" id="admin-selected-info">未選択</div>
+      </div>
+      <div class="admin-section">
+        <h4>出現率と時間</h4>
+        <div class="admin-row">
+          <input id="admin-mound-interval" class="admin-input" type="number" step="100" min="1000" placeholder="土スポーンms">
+          <button class="admin-btn good" id="admin-mound-apply">土間隔反映</button>
+        </div>
+        <div class="admin-row">
+          <input id="admin-thief-interval" class="admin-input" type="number" step="100" min="1000" placeholder="盗人ms">
+          <button class="admin-btn warn" id="admin-thief-apply">盗人間隔反映</button>
+        </div>
+        <div class="admin-row">
+          <button class="admin-btn gray" id="admin-clear-world">地上のモブ全消し</button>
+          <button class="admin-btn gray" id="admin-save-now">即保存</button>
+        </div>
+      </div>
+      <div class="admin-section">
+        <h4>便利操作</h4>
+        <div class="admin-row">
+          <button class="admin-btn good" id="admin-deploy-all">全員出陣</button>
+          <button class="admin-btn gray" id="admin-recall-all">全員待機</button>
+          <button class="admin-btn warn" id="admin-heal-coins">コイン999999</button>
+        </div>
+        <div class="admin-row">
+          <button class="admin-btn gold" id="admin-stage-boost">ステージ+10</button>
+          <button class="admin-btn gold" id="admin-luck-boost">ラック+10</button>
+          <button class="admin-btn gray" id="admin-close-2">閉じる</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================
+     MONSTER DEFINITIONS (170 total, 34 rarity tiers)
+     Generated with a balanced weight table; power/guard/luck
+     scale with rarity for the auto-battle system.
+  ========================================================= */
+  const RARITY_INFO = {
+    common:     { jp:'コモン',        col:'#9AA0B0' },
+    uncommon:   { jp:'アンコモン',    col:'#4FCE73' },
+    rare:       { jp:'レア',          col:'#4FA8FF' },
+    epic:       { jp:'エピック',      col:'#B06EFF' },
+    legendary:  { jp:'レジェンダリー',col:'#F5B90D' },
+    mythic:     { jp:'ミシック',      col:'#FF6EC7' },
+    divine:     { jp:'ディヴァイン',  col:'#FF9E2C' },
+    celestial:  { jp:'セレスティアル',col:'#5CFFD9' },
+    primordial: { jp:'プライモーディアル', col:'#C86BFF' },
+    eternal:    { jp:'エターナル',    col:'#FFFFFF' },
+    ascendant:  { jp:'アセンダント',  col:'#FF7CE5' },
+    transcendent:{ jp:'トランセンデント', col:'#8A5CFF' },
+    apex:       { jp:'アペックス',    col:'#FFD700' },
+    mythos:     { jp:'ミュトス',      col:'#F59AD3' },
+    astral:     { jp:'アストラル',    col:'#8EDBFF' },
+    relic:      { jp:'レリック',      col:'#D6C08A' },
+    cosmic:     { jp:'コズミック',    col:'#7AE7FF' },
+    chaos:      { jp:'カオス',        col:'#C47BFF' },
+    omega:      { jp:'オメガ',        col:'#FF94C2' },
+    infinity:   { jp:'インフィニティ',col:'#FFF08A' },
+    singularity:{ jp:'シンギュラリティ', col:'#FFFFFF' },
+    primevoid:  { jp:'プライムヴォイド', col:'#9D7CFF' },
+    godcore:    { jp:'ゴッドコア',    col:'#FFD66B' },
+    zenith:     { jp:'ゼニス',        col:'#FFF5B8' },
+    abyssal:    { jp:'アビサル',      col:'#4B2E83' },
+    prismatic:  { jp:'プリズマティック', col:'#4DFFF3' },
+    eclipse:    { jp:'エクリプス',    col:'#6B5BFF' },
+    paradox:    { jp:'パラドックス',  col:'#FF6AA2' },
+    nirvana:    { jp:'ニルヴァーナ',  col:'#F8D66D' },
+    astrum:     { jp:'アストラム',    col:'#9FE8FF' },
+    voidstar:   { jp:'ヴォイドスター',col:'#7C4DFF' },
+    genesis:    { jp:'ジェネシス',    col:'#7DFFB8' },
+    overcore:   { jp:'オーバーコア',  col:'#FF8A4D' },
+    aphelion:   { jp:'アフェリオン',  col:'#FFFFFF' },
+  };
+  // Order used for sorting / display (rarest last). Kept separate from the
+  // object above since object key order isn't guaranteed to be relied upon.
+  const RARITY_ORDER = ['common','uncommon','rare','epic','legendary','mythic','divine','celestial','primordial','eternal','ascendant','transcendent','apex','mythos','astral','relic','cosmic','chaos','omega','infinity','singularity','primevoid','godcore','zenith','abyssal','prismatic','eclipse','paradox','nirvana','astrum','voidstar','genesis','overcore','aphelion'];
+
+  const MONSTER_DEFS = [
+    { id:1, key:'pinkle', name:'Pinkle', nameJp:'ピンクル', rarity:'common', color:0xFF9FBB, glow:false, power:13, guard:8, luck:3, coinValue:3.2, weight:3.21429 },
+    { id:2, key:'mintaro', name:'Mintaro', nameJp:'ミンタロウ', rarity:'common', color:0x8CE0A8, glow:false, power:9, guard:9, luck:4, coinValue:3.2, weight:3.21429 },
+    { id:3, key:'bubbo', name:'Bubbo', nameJp:'バブォ', rarity:'common', color:0x8FD6FF, glow:false, power:13, guard:13, luck:7, coinValue:2.6, weight:3.21429 },
+    { id:4, key:'lemobo', name:'Lemobo', nameJp:'レモボ', rarity:'common', color:0xFFE873, glow:false, power:11, guard:8, luck:3, coinValue:2.6, weight:3.21429 },
+    { id:5, key:'puffle', name:'Puffle', nameJp:'パフル', rarity:'common', color:0xD9C4FF, glow:false, power:9, guard:12, luck:7, coinValue:2.5, weight:3.21429 },
+    { id:6, key:'coraly', name:'Coraly', nameJp:'コラリー', rarity:'common', color:0xFFB49E, glow:false, power:9, guard:13, luck:8, coinValue:3.2, weight:3.21429 },
+    { id:7, key:'sagey', name:'Sagey', nameJp:'セイジー', rarity:'common', color:0xAFE39A, glow:false, power:11, guard:9, luck:6, coinValue:3.1, weight:3.21429 },
+    { id:8, key:'sorbeon', name:'Sorbeon', nameJp:'ソルベオン', rarity:'common', color:0xFFD1E8, glow:false, power:14, guard:14, luck:3, coinValue:3.3, weight:3.21429 },
+    { id:9, key:'mochimo', name:'Mochimo', nameJp:'モチモ', rarity:'common', color:0xF6F0D8, glow:false, power:9, guard:13, luck:6, coinValue:2.8, weight:3.21429 },
+    { id:10, key:'aquabun', name:'Aquabun', nameJp:'アクアバン', rarity:'common', color:0x7FE0E8, glow:false, power:9, guard:9, luck:5, coinValue:2.6, weight:3.21429 },
+    { id:11, key:'peachup', name:'Peachup', nameJp:'ピーチャップ', rarity:'common', color:0xFFC8A8, glow:false, power:11, guard:8, luck:5, coinValue:3.3, weight:3.21429 },
+    { id:12, key:'cloverin', name:'Cloverin', nameJp:'クローバリン', rarity:'common', color:0x9FE0B0, glow:false, power:12, guard:10, luck:3, coinValue:3.2, weight:3.21429 },
+    { id:13, key:'bunchy', name:'Bunchy', nameJp:'バンチー', rarity:'common', color:0xE7C1FF, glow:false, power:12, guard:8, luck:6, coinValue:2.6, weight:3.21429 },
+    { id:14, key:'tangello', name:'Tangello', nameJp:'タンジェロ', rarity:'common', color:0xFFB870, glow:false, power:10, guard:14, luck:8, coinValue:3.1, weight:3.21429 },
+    { id:15, key:'voltoad', name:'Voltoad', nameJp:'ボルトード', rarity:'uncommon', color:0xFFE45A, glow:false, power:18, guard:16, luck:11, coinValue:4.4, weight:2.45455 },
+    { id:16, key:'frostep', name:'Frostep', nameJp:'フロステップ', rarity:'uncommon', color:0xAFE9FF, glow:false, power:16, guard:17, luck:6, coinValue:5.2, weight:2.45455 },
+    { id:17, key:'emberly', name:'Emberly', nameJp:'エンバリー', rarity:'uncommon', color:0xFF8F5E, glow:false, power:14, guard:19, luck:8, coinValue:4.8, weight:2.45455 },
+    { id:18, key:'duskin', name:'Duskin', nameJp:'ダスキン', rarity:'uncommon', color:0x9A8CFF, glow:false, power:18, guard:15, luck:8, coinValue:4.7, weight:2.45455 },
+    { id:19, key:'marisol', name:'Marisol', nameJp:'マリソル', rarity:'uncommon', color:0x6FD1FF, glow:false, power:17, guard:14, luck:10, coinValue:4.9, weight:2.45455 },
+    { id:20, key:'pyrring', name:'Pyrring', nameJp:'パイリング', rarity:'uncommon', color:0xFF7A6E, glow:false, power:16, guard:15, luck:9, coinValue:4.7, weight:2.45455 },
+    { id:21, key:'glimmox', name:'Glimmox', nameJp:'グリモックス', rarity:'uncommon', color:0xC8FF6E, glow:false, power:16, guard:18, luck:12, coinValue:5.1, weight:2.45455 },
+    { id:22, key:'thornip', name:'Thornip', nameJp:'ソーニップ', rarity:'uncommon', color:0x7FCB7A, glow:false, power:13, guard:16, luck:12, coinValue:4.3, weight:2.45455 },
+    { id:23, key:'sandril', name:'Sandril', nameJp:'サンドリル', rarity:'uncommon', color:0xE8C97A, glow:false, power:18, guard:19, luck:8, coinValue:4.4, weight:2.45455 },
+    { id:24, key:'wispette', name:'Wispette', nameJp:'ウィスペット', rarity:'uncommon', color:0xC9AFFF, glow:false, power:18, guard:16, luck:11, coinValue:4.8, weight:2.45455 },
+    { id:25, key:'coalby', name:'Coalby', nameJp:'コールビー', rarity:'uncommon', color:0x8A8398, glow:false, power:20, guard:15, luck:8, coinValue:4.4, weight:2.45455 },
+    { id:26, key:'zephyrun', name:'Zephyrun', nameJp:'ゼファールン', rarity:'rare', color:0x7AD1FF, glow:true, power:27, guard:27, luck:12, coinValue:7.7, weight:2.0 },
+    { id:27, key:'magmoro', name:'Magmoro', nameJp:'マグモロ', rarity:'rare', color:0xFF5E3E, glow:true, power:25, guard:28, luck:13, coinValue:7.4, weight:2.0 },
+    { id:28, key:'crystile', name:'Crystile', nameJp:'クリスタイル', rarity:'rare', color:0xB6F0FF, glow:true, power:21, guard:27, luck:13, coinValue:7.1, weight:2.0 },
+    { id:29, key:'nebulox', name:'Nebulox', nameJp:'ネビュロックス', rarity:'rare', color:0x9B6EFF, glow:true, power:19, guard:20, luck:11, coinValue:7.6, weight:2.0 },
+    { id:30, key:'thundrake', name:'Thundrake', nameJp:'サンドレイク', rarity:'rare', color:0xFFD23E, glow:true, power:25, guard:28, luck:10, coinValue:7.4, weight:2.0 },
+    { id:31, key:'verdanix', name:'Verdanix', nameJp:'ヴェルダニクス', rarity:'rare', color:0x4FE07A, glow:true, power:28, guard:26, luck:14, coinValue:7.3, weight:2.0 },
+    { id:32, key:'frostcaller', name:'Frostcaller', nameJp:'フロストコーラー', rarity:'rare', color:0xAFF9FF, glow:true, power:27, guard:19, luck:15, coinValue:7.7, weight:2.0 },
+    { id:33, key:'emberfang', name:'Emberfang', nameJp:'エンバーファング', rarity:'rare', color:0xFF6B4A, glow:true, power:27, guard:23, luck:16, coinValue:7.6, weight:2.0 },
+    { id:34, key:'aurorix', name:'Aurorix', nameJp:'オーロリックス', rarity:'epic', color:0xB08CFF, glow:true, power:28, guard:31, luck:20, coinValue:11.7, weight:2.0 },
+    { id:35, key:'infernyx', name:'Infernyx', nameJp:'インフェルニクス', rarity:'epic', color:0xFF3E5E, glow:true, power:27, guard:38, luck:18, coinValue:12.5, weight:2.0 },
+    { id:36, key:'glacielle', name:'Glacielle', nameJp:'グラシエル', rarity:'epic', color:0x7EE9FF, glow:true, power:29, guard:35, luck:15, coinValue:12.4, weight:2.0 },
+    { id:37, key:'terravox', name:'Terravox', nameJp:'テラヴォックス', rarity:'epic', color:0x6EDB8C, glow:true, power:31, guard:37, luck:22, coinValue:12.1, weight:2.0 },
+    { id:38, key:'celestara', name:'Celestara', nameJp:'セレスタラ', rarity:'legendary', color:0xFFD873, glow:true, power:40, guard:43, luck:22, coinValue:21.0, weight:1.6 },
+    { id:39, key:'voidrake', name:'Voidrake', nameJp:'ヴォイドレイク', rarity:'legendary', color:0x5E4AFF, glow:true, power:50, guard:52, luck:28, coinValue:21.4, weight:1.6 },
+    { id:40, key:'astrelune', name:'Astrelune', nameJp:'アストレルーン', rarity:'mythic', color:0xFFFFFF, glow:true, power:65, guard:70, luck:32, coinValue:41.6, weight:0.8 },
+    { id:41, key:'mirabasilisk', name:'MiraBasilisk', nameJp:'ミラバジリス', rarity:'divine', color:0xDAA97C, glow:true, power:78, guard:91, luck:36, coinValue:79.1, weight:0.42 },
+    { id:42, key:'dragolion', name:'DragoLion', nameJp:'ドラゴリオン', rarity:'divine', color:0xDA8550, glow:true, power:88, guard:81, luck:37, coinValue:79.5, weight:0.42 },
+    { id:43, key:'novaprism', name:'NovaPrism', nameJp:'ノヴァプリズム', rarity:'divine', color:0xE0AF56, glow:true, power:82, guard:81, luck:44, coinValue:78.6, weight:0.42 },
+    { id:44, key:'infisun', name:'InfiSun', nameJp:'インフィサン', rarity:'divine', color:0xD38C5C, glow:true, power:80, guard:83, luck:39, coinValue:73.7, weight:0.42 },
+    { id:45, key:'prismsiren', name:'PrismSiren', nameJp:'プリズムセイレーン', rarity:'divine', color:0xE2A35B, glow:true, power:88, guard:90, luck:43, coinValue:75.9, weight:0.42 },
+    { id:46, key:'rubynova', name:'RubyNova', nameJp:'ルビーノヴァ', rarity:'divine', color:0xE8A065, glow:true, power:82, guard:82, luck:40, coinValue:75.3, weight:0.42 },
+    { id:47, key:'shinenebula', name:'ShineNebula', nameJp:'シャインネビュラ', rarity:'divine', color:0xE88739, glow:true, power:88, guard:85, luck:41, coinValue:71.5, weight:0.42 },
+    { id:48, key:'emerasun', name:'EmeraSun', nameJp:'エメラサン', rarity:'divine', color:0xE6996C, glow:true, power:85, guard:90, luck:41, coinValue:75.9, weight:0.42 },
+    { id:49, key:'radicomet', name:'RadiComet', nameJp:'レイディコメット', rarity:'divine', color:0xD2885A, glow:true, power:77, guard:81, luck:40, coinValue:76.5, weight:0.42 },
+    { id:50, key:'celesnebula', name:'CelesNebula', nameJp:'セレスネビュラ', rarity:'divine', color:0xDF9F6C, glow:true, power:75, guard:94, luck:41, coinValue:71.7, weight:0.42 },
+    { id:51, key:'auraecho', name:'AuraEcho', nameJp:'オーラエコー', rarity:'divine', color:0xE27D3F, glow:true, power:82, guard:92, luck:42, coinValue:79.2, weight:0.42 },
+    { id:52, key:'emerachimera', name:'EmeraChimera', nameJp:'エメラキマイラ', rarity:'divine', color:0xDA8A53, glow:true, power:79, guard:93, luck:44, coinValue:72.8, weight:0.42 },
+    { id:53, key:'gemcore', name:'GemCore', nameJp:'ジェムコア', rarity:'divine', color:0xD99D50, glow:true, power:77, guard:85, luck:38, coinValue:72.3, weight:0.42 },
+    { id:54, key:'phoenidrake', name:'PhoeniDrake', nameJp:'フェニドラゴン', rarity:'divine', color:0xDF974D, glow:true, power:75, guard:84, luck:42, coinValue:75.3, weight:0.42 },
+    { id:55, key:'radiavortex', name:'RadiaVortex', nameJp:'ラディヴォルテックス', rarity:'divine', color:0xDCA87D, glow:true, power:76, guard:94, luck:44, coinValue:73.9, weight:0.42 },
+    { id:56, key:'crescmoon', name:'CrescMoon', nameJp:'クレセントムーン', rarity:'divine', color:0xDE7D3F, glow:true, power:77, guard:86, luck:43, coinValue:71.6, weight:0.42 },
+    { id:57, key:'shineaura', name:'ShineAura', nameJp:'シャインオーラ', rarity:'divine', color:0xCD8356, glow:true, power:78, guard:91, luck:36, coinValue:70.7, weight:0.42 },
+    { id:58, key:'dragograce', name:'DragoGrace', nameJp:'ドラゴグレイス', rarity:'divine', color:0xE8AD79, glow:true, power:86, guard:95, luck:37, coinValue:71.2, weight:0.42 },
+    { id:59, key:'emeracomet', name:'EmeraComet', nameJp:'エメラコメット', rarity:'divine', color:0xD6924D, glow:true, power:85, guard:88, luck:43, coinValue:78.3, weight:0.42 },
+    { id:60, key:'flareillusion', name:'FlareIllusion', nameJp:'フレアイリュージョン', rarity:'divine', color:0xEA8C55, glow:true, power:79, guard:80, luck:44, coinValue:73.0, weight:0.42 },
+    { id:61, key:'galachimera', name:'GalaChimera', nameJp:'ギャラキマイラ', rarity:'divine', color:0xD8A25C, glow:true, power:80, guard:91, luck:39, coinValue:75.3, weight:0.42 },
+    { id:62, key:'tempemirage', name:'TempeMirage', nameJp:'テンペミラージュ', rarity:'divine', color:0xDDA778, glow:true, power:81, guard:87, luck:42, coinValue:77.4, weight:0.42 },
+    { id:63, key:'phoenititan', name:'PhoeniTitan', nameJp:'フェニタイタン', rarity:'divine', color:0xD58F44, glow:true, power:75, guard:88, luck:43, coinValue:72.6, weight:0.42 },
+    { id:64, key:'divaaura', name:'DivaAura', nameJp:'ディヴァオーラ', rarity:'divine', color:0xE4BF7B, glow:true, power:86, guard:91, luck:37, coinValue:72.2, weight:0.42 },
+    { id:65, key:'phoeniwisp', name:'PhoeniWisp', nameJp:'フェニウィスプ', rarity:'divine', color:0xDA9B6D, glow:true, power:75, guard:95, luck:41, coinValue:78.0, weight:0.42 },
+    { id:66, key:'grandpegasus', name:'GrandPegasus', nameJp:'グランペガス', rarity:'divine', color:0xE9BA68, glow:true, power:90, guard:85, luck:42, coinValue:77.9, weight:0.42 },
+    { id:67, key:'shinechimera', name:'ShineChimera', nameJp:'シャインキマイラ', rarity:'divine', color:0xEAAB4C, glow:true, power:87, guard:82, luck:38, coinValue:71.7, weight:0.42 },
+    { id:68, key:'nebulphoenix', name:'NebulPhoenix', nameJp:'ネビュラフェニックス', rarity:'divine', color:0xEC9E69, glow:true, power:79, guard:95, luck:41, coinValue:71.6, weight:0.42 },
+    { id:69, key:'prismsphinx', name:'PrismSphinx', nameJp:'プリズムスフィンク', rarity:'divine', color:0xE99666, glow:true, power:78, guard:84, luck:42, coinValue:79.9, weight:0.42 },
+    { id:70, key:'seraphgolem', name:'SeraphGolem', nameJp:'セラフゴーレム', rarity:'divine', color:0xD99065, glow:true, power:85, guard:88, luck:44, coinValue:74.2, weight:0.42 },
+    { id:71, key:'nebulgriff', name:'NebulGriff', nameJp:'ネビュラグリフ', rarity:'divine', color:0xDBAE5F, glow:true, power:88, guard:84, luck:44, coinValue:71.5, weight:0.42 },
+    { id:72, key:'topazphoenix', name:'TopazPhoenix', nameJp:'トパーズフェニックス', rarity:'divine', color:0xE7B45F, glow:true, power:79, guard:85, luck:38, coinValue:74.7, weight:0.42 },
+    { id:73, key:'eterpegasus', name:'EterPegasus', nameJp:'エターペガス', rarity:'divine', color:0xDCA364, glow:true, power:90, guard:83, luck:44, coinValue:70.6, weight:0.42 },
+    { id:74, key:'seraphspirit', name:'SeraphSpirit', nameJp:'セラフスピリット', rarity:'divine', color:0xD58F65, glow:true, power:75, guard:82, luck:43, coinValue:73.3, weight:0.42 },
+    { id:75, key:'topazaura', name:'TopazAura', nameJp:'トパーズオーラ', rarity:'celestial', color:0x57E3E4, glow:true, power:112, guard:115, luck:53, coinValue:138.8, weight:0.22 },
+    { id:76, key:'divaillusion', name:'DivaIllusion', nameJp:'ディヴァイリュージョン', rarity:'celestial', color:0x43D2E8, glow:true, power:112, guard:106, luck:52, coinValue:122.7, weight:0.22 },
+    { id:77, key:'auramoon', name:'AuraMoon', nameJp:'オーラムーン', rarity:'celestial', color:0x59D1CE, glow:true, power:97, guard:106, luck:55, coinValue:126.1, weight:0.22 },
+    { id:78, key:'aurabasilisk', name:'AuraBasilisk', nameJp:'オーラバジリス', rarity:'celestial', color:0x52CBE1, glow:true, power:103, guard:104, luck:52, coinValue:124.4, weight:0.22 },
+    { id:79, key:'velmoon', name:'VelMoon', nameJp:'ヴェルムーン', rarity:'celestial', color:0x71CBDA, glow:true, power:102, guard:105, luck:51, coinValue:139.9, weight:0.22 },
+    { id:80, key:'crescorb', name:'CrescOrb', nameJp:'クレセントオーブ', rarity:'celestial', color:0x48D6D2, glow:true, power:106, guard:100, luck:50, coinValue:131.1, weight:0.22 },
+    { id:81, key:'onyxphoenix', name:'OnyxPhoenix', nameJp:'オニキスフェニックス', rarity:'celestial', color:0x51DDD7, glow:true, power:97, guard:103, luck:48, coinValue:139.4, weight:0.22 },
+    { id:82, key:'velchimera', name:'VelChimera', nameJp:'ヴェルキマイラ', rarity:'celestial', color:0x7AD9D1, glow:true, power:103, guard:104, luck:51, coinValue:137.0, weight:0.22 },
+    { id:83, key:'celesdaemon', name:'CelesDaemon', nameJp:'セレスデーモン', rarity:'celestial', color:0x5EE0DC, glow:true, power:110, guard:110, luck:46, coinValue:125.6, weight:0.22 },
+    { id:84, key:'divacerberus', name:'DivaCerberus', nameJp:'ディヴァケルベロ', rarity:'celestial', color:0x83DCDA, glow:true, power:115, guard:102, luck:49, coinValue:121.7, weight:0.22 },
+    { id:85, key:'phoenisiren', name:'PhoeniSiren', nameJp:'フェニセイレーン', rarity:'celestial', color:0x4ACFC3, glow:true, power:112, guard:113, luck:49, coinValue:132.4, weight:0.22 },
+    { id:86, key:'stellaillusion', name:'StellaIllusion', nameJp:'ステライリュージョン', rarity:'celestial', color:0x74E5EE, glow:true, power:103, guard:101, luck:47, coinValue:124.0, weight:0.22 },
+    { id:87, key:'eclipshade', name:'EclipShade', nameJp:'エクリプシェイド', rarity:'celestial', color:0x62D6D8, glow:true, power:100, guard:108, luck:50, coinValue:136.1, weight:0.22 },
+    { id:88, key:'omegalion', name:'OmegaLion', nameJp:'オメガリオン', rarity:'celestial', color:0x5CE6CE, glow:true, power:101, guard:116, luck:52, coinValue:124.9, weight:0.22 },
+    { id:89, key:'onyxunicorn', name:'OnyxUnicorn', nameJp:'オニキスユニコン', rarity:'celestial', color:0x65DDE5, glow:true, power:112, guard:112, luck:53, coinValue:126.2, weight:0.22 },
+    { id:90, key:'dragovalkyrie', name:'DragoValkyrie', nameJp:'ドラゴヴァルキリ', rarity:'celestial', color:0x64E9E2, glow:true, power:115, guard:104, luck:51, coinValue:139.8, weight:0.22 },
+    { id:91, key:'cosmosphinx', name:'CosmoSphinx', nameJp:'コスモスフィンク', rarity:'celestial', color:0x74E7D3, glow:true, power:108, guard:105, luck:45, coinValue:121.7, weight:0.22 },
+    { id:92, key:'sparkmirage', name:'SparkMirage', nameJp:'スパークミラージュ', rarity:'celestial', color:0x54CED6, glow:true, power:104, guard:101, luck:52, coinValue:123.7, weight:0.22 },
+    { id:93, key:'alphanebula', name:'AlphaNebula', nameJp:'アルファネビュラ', rarity:'celestial', color:0x57DAC2, glow:true, power:112, guard:110, luck:48, coinValue:120.7, weight:0.22 },
+    { id:94, key:'eclipgolem', name:'EclipGolem', nameJp:'エクリプゴーレム', rarity:'celestial', color:0x63D1CC, glow:true, power:110, guard:108, luck:53, coinValue:133.1, weight:0.22 },
+    { id:95, key:'zenithmirage', name:'ZenithMirage', nameJp:'ゼニスミラージュ', rarity:'celestial', color:0x7BD1DB, glow:true, power:99, guard:112, luck:54, coinValue:120.8, weight:0.22 },
+    { id:96, key:'lunashade', name:'LunaShade', nameJp:'ルナシェイド', rarity:'celestial', color:0x6ADAD2, glow:true, power:111, guard:104, luck:55, coinValue:137.9, weight:0.22 },
+    { id:97, key:'shimmerstar', name:'ShimmerStar', nameJp:'シマースター', rarity:'celestial', color:0x59D7E5, glow:true, power:104, guard:119, luck:55, coinValue:122.9, weight:0.22 },
+    { id:98, key:'primemirage', name:'PrimeMirage', nameJp:'プライムミラージュ', rarity:'celestial', color:0x6DE3E8, glow:true, power:99, guard:116, luck:53, coinValue:131.4, weight:0.22 },
+    { id:99, key:'lunaprism', name:'LunaPrism', nameJp:'ルナプリズム', rarity:'celestial', color:0x77DDE9, glow:true, power:115, guard:107, luck:46, coinValue:120.6, weight:0.22 },
+    { id:100, key:'nebulnova', name:'NebulNova', nameJp:'ネビュラノヴァ', rarity:'celestial', color:0x5EC7DC, glow:true, power:96, guard:120, luck:45, coinValue:132.5, weight:0.22 },
+    { id:101, key:'celesangel', name:'CelesAngel', nameJp:'セレスエンジェル', rarity:'primordial', color:0xAF7CD9, glow:true, power:153, guard:151, luck:64, coinValue:212.8, weight:0.11 },
+    { id:102, key:'amethysiren', name:'AmethySiren', nameJp:'アメジセイレーン', rarity:'primordial', color:0xBF73E3, glow:true, power:138, guard:142, luck:59, coinValue:216.9, weight:0.11 },
+    { id:103, key:'galacomet', name:'GalaComet', nameJp:'ギャラコメット', rarity:'primordial', color:0xA560DC, glow:true, power:151, guard:144, luck:56, coinValue:228.5, weight:0.11 },
+    { id:104, key:'galatitan', name:'GalaTitan', nameJp:'ギャラタイタン', rarity:'primordial', color:0x8458D3, glow:true, power:153, guard:157, luck:60, coinValue:228.6, weight:0.11 },
+    { id:105, key:'nebuldrake', name:'NebulDrake', nameJp:'ネビュラドラゴン', rarity:'primordial', color:0xB67DE5, glow:true, power:133, guard:157, luck:59, coinValue:230.3, weight:0.11 },
+    { id:106, key:'infiillusion', name:'InfiIllusion', nameJp:'インフィイリュージョン', rarity:'primordial', color:0xA470E2, glow:true, power:147, guard:141, luck:60, coinValue:239.3, weight:0.11 },
+    { id:107, key:'saphiphoenix', name:'SaphiPhoenix', nameJp:'サファフェニックス', rarity:'primordial', color:0x9B69D5, glow:true, power:144, guard:143, luck:62, coinValue:216.3, weight:0.11 },
+    { id:108, key:'dragosiren', name:'DragoSiren', nameJp:'ドラゴセイレーン', rarity:'primordial', color:0xAB68D7, glow:true, power:141, guard:139, luck:65, coinValue:234.6, weight:0.11 },
+    { id:109, key:'topazspirit', name:'TopazSpirit', nameJp:'トパーズスピリット', rarity:'primordial', color:0xBA48E1, glow:true, power:145, guard:147, luck:56, coinValue:214.8, weight:0.11 },
+    { id:110, key:'emeranebula', name:'EmeraNebula', nameJp:'エメラネビュラ', rarity:'primordial', color:0x9E53E4, glow:true, power:142, guard:145, luck:57, coinValue:235.2, weight:0.11 },
+    { id:111, key:'solcrystal', name:'SolCrystal', nameJp:'ソルクリスタル', rarity:'primordial', color:0xAF3DE4, glow:true, power:136, guard:157, luck:56, coinValue:237.0, weight:0.11 },
+    { id:112, key:'infidaemon', name:'InfiDaemon', nameJp:'インフィデーモン', rarity:'primordial', color:0xB280E4, glow:true, power:148, guard:137, luck:61, coinValue:237.8, weight:0.11 },
+    { id:113, key:'chronospirit', name:'ChronoSpirit', nameJp:'クロノスピリット', rarity:'primordial', color:0xAE48D4, glow:true, power:151, guard:144, luck:66, coinValue:238.1, weight:0.11 },
+    { id:114, key:'zenithspirit', name:'ZenithSpirit', nameJp:'ゼニススピリット', rarity:'primordial', color:0xAC74DF, glow:true, power:155, guard:148, luck:56, coinValue:234.4, weight:0.11 },
+    { id:115, key:'novamoon', name:'NovaMoon', nameJp:'ノヴァムーン', rarity:'primordial', color:0xC757EA, glow:true, power:153, guard:137, luck:56, coinValue:238.0, weight:0.11 },
+    { id:116, key:'gemnebula', name:'GemNebula', nameJp:'ジェムネビュラ', rarity:'primordial', color:0xB87DDD, glow:true, power:145, guard:136, luck:64, coinValue:213.8, weight:0.11 },
+    { id:117, key:'saphisun', name:'SaphiSun', nameJp:'サファサン', rarity:'eternal', color:0xE6F3E7, glow:true, power:184, guard:188, luck:81, coinValue:416.9, weight:0.045 },
+    { id:118, key:'galadaemon', name:'GalaDaemon', nameJp:'ギャラデーモン', rarity:'eternal', color:0xE6F3EC, glow:true, power:182, guard:189, luck:77, coinValue:407.9, weight:0.045 },
+    { id:119, key:'crescpegasus', name:'CrescPegasus', nameJp:'クレセントペガス', rarity:'eternal', color:0xF3F3E6, glow:true, power:180, guard:182, luck:73, coinValue:405.0, weight:0.045 },
+    { id:120, key:'emeranexus', name:'EmeraNexus', nameJp:'エメラネクサス', rarity:'eternal', color:0xEFF3E6, glow:true, power:204, guard:190, luck:82, coinValue:402.5, weight:0.045 },
+    { id:121, key:'astralveil', name:'AstralVeil', nameJp:'アストラルヴェール', rarity:'ascendant', color:0xFFD1F7, glow:true, power:260, guard:255, luck:98, coinValue:820.0, weight:0.02 },
+    { id:122, key:'omniforge', name:'OmniForge', nameJp:'オムニフォージ', rarity:'ascendant', color:0xD1E4FF, glow:true, power:270, guard:248, luck:95, coinValue:835.0, weight:0.02 },
+    { id:123, key:'novasanctum', name:'NovaSanctum', nameJp:'ノヴァサンクタム', rarity:'ascendant', color:0xFFF0C2, glow:true, power:255, guard:265, luck:100, coinValue:810.0, weight:0.02 },
+    { id:124, key:'genesiswyrm', name:'GenesisWyrm', nameJp:'ジェネシスワーム', rarity:'ascendant', color:0xC2FFE0, glow:true, power:280, guard:260, luck:93, coinValue:845.0, weight:0.02 },
+    { id:125, key:'voidmonarch', name:'VoidMonarch', nameJp:'ヴォイドモナーク', rarity:'transcendent', color:0x1A1033, glow:true, power:420, guard:410, luck:140, coinValue:2100.0, weight:0.006 },
+    { id:126, key:'omegaseraph', name:'OmegaSeraph', nameJp:'オメガセラフ', rarity:'transcendent', color:0x2A0F3F, glow:true, power:435, guard:400, luck:145, coinValue:2150.0, weight:0.006 },
+    { id:127, key:'chronoabyss', name:'ChronoAbyss', nameJp:'クロノアビス', rarity:'transcendent', color:0x120A2A, glow:true, power:410, guard:430, luck:138, coinValue:2075.0, weight:0.006 },
+    { id:128, key:'primalgod', name:'PrimalGod', nameJp:'プライマルゴッド', rarity:'apex', color:0xFFFFFF, glow:true, power:800, guard:790, luck:220, coinValue:6600.0, weight:0.0015 },
+    { id:129, key:'lastcreator', name:'LastCreator', nameJp:'ラストクリエイター', rarity:'apex', color:0xFFF9E8, glow:true, power:820, guard:805, luck:225, coinValue:6750.0, weight:0.0015 },
+    { id:130, key:'zenoria', name:'Zenoria', nameJp:'ゼノリア', rarity:'zenith', color:0xFFF1C2, glow:true, power:310, guard:300, luck:120, coinValue:12000.0, weight:0.01800 },
+    { id:131, key:'zenthra', name:'Zenthra', nameJp:'ゼンスラ', rarity:'zenith', color:0xFEE7A7, glow:true, power:322, guard:312, luck:125, coinValue:12520.0, weight:0.01950 },
+    { id:132, key:'zephyra', name:'Zephyra', nameJp:'ゼフィラ', rarity:'zenith', color:0xFFF7E2, glow:true, power:334, guard:324, luck:130, coinValue:13040.0, weight:0.02100 },
+    { id:133, key:'zythra', name:'Zythra', nameJp:'ジスラ', rarity:'zenith', color:0xFFE9BE, glow:true, power:346, guard:336, luck:135, coinValue:13020.0, weight:0.02250 },
+    { id:134, key:'zenquill', name:'Zenquill', nameJp:'ゼンクイル', rarity:'zenith', color:0xFFF1C2, glow:true, power:338, guard:348, luck:140, coinValue:13540.0, weight:0.01800 },
+    { id:135, key:'zelois', name:'Zelois', nameJp:'ゼロイス', rarity:'zenith', color:0xFEE7A7, glow:true, power:350, guard:330, luck:145, coinValue:14060.0, weight:0.01950 },
+    { id:136, key:'zaira', name:'Zaira', nameJp:'ザイラ', rarity:'zenith', color:0xFFF7E2, glow:true, power:362, guard:342, luck:138, coinValue:14040.0, weight:0.02100 },
+    { id:137, key:'zerciel', name:'Zerciel', nameJp:'ゼルシエル', rarity:'zenith', color:0xFFE9BE, glow:true, power:374, guard:354, luck:143, coinValue:14560.0, weight:0.02250 },
+    { id:138, key:'zovael', name:'Zovael', nameJp:'ゾヴァエル', rarity:'zenith', color:0xFFF1C2, glow:true, power:366, guard:366, luck:148, coinValue:15080.0, weight:0.01800 },
+    { id:139, key:'zylune', name:'Zylune', nameJp:'ジルーン', rarity:'zenith', color:0xFEE7A7, glow:true, power:378, guard:378, luck:153, coinValue:15060.0, weight:0.01950 },
+    { id:140, key:'zenbloom', name:'Zenbloom', nameJp:'ゼンブルーム', rarity:'zenith', color:0xFFF7E2, glow:true, power:390, guard:360, luck:158, coinValue:15580.0, weight:0.02100 },
+    { id:141, key:'zarion', name:'Zarion', nameJp:'ザリオン', rarity:'zenith', color:0xFFE9BE, glow:true, power:402, guard:372, luck:163, coinValue:16100.0, weight:0.02250 },
+    { id:142, key:'zaphyr', name:'Zaphyr', nameJp:'ザフィル', rarity:'zenith', color:0xFFF1C2, glow:true, power:394, guard:384, luck:156, coinValue:16080.0, weight:0.01800 },
+    { id:143, key:'zermina', name:'Zermina', nameJp:'ゼルミナ', rarity:'zenith', color:0xFEE7A7, glow:true, power:406, guard:396, luck:161, coinValue:16600.0, weight:0.01950 },
+    { id:144, key:'zoyra', name:'Zoyra', nameJp:'ゾイラ', rarity:'zenith', color:0xFFF7E2, glow:true, power:418, guard:408, luck:166, coinValue:17120.0, weight:0.02100 },
+    { id:145, key:'zevian', name:'Zevian', nameJp:'ゼヴィアン', rarity:'zenith', color:0xFFE9BE, glow:true, power:430, guard:390, luck:171, coinValue:17100.0, weight:0.02250 },
+    { id:146, key:'zenflare', name:'Zenflare', nameJp:'ゼンフレア', rarity:'zenith', color:0xFFF1C2, glow:true, power:422, guard:402, luck:176, coinValue:17620.0, weight:0.01800 },
+    { id:147, key:'zurelia', name:'Zurelia', nameJp:'ズレリア', rarity:'zenith', color:0xFEE7A7, glow:true, power:434, guard:414, luck:181, coinValue:18140.0, weight:0.01950 },
+    { id:148, key:'zornel', name:'Zornel', nameJp:'ゾルネル', rarity:'zenith', color:0xFFF7E2, glow:true, power:446, guard:426, luck:174, coinValue:18120.0, weight:0.02100 },
+    { id:149, key:'zeyrith', name:'Zeyrith', nameJp:'ゼイリス', rarity:'zenith', color:0xFFE9BE, glow:true, power:458, guard:438, luck:179, coinValue:18640.0, weight:0.02250 },
+    { id:150, key:'zunovia', name:'Zunovia', nameJp:'ズノヴィア', rarity:'zenith', color:0xFFF1C2, glow:true, power:450, guard:420, luck:184, coinValue:19160.0, weight:0.01800 },
+    { id:151, key:'zelphos', name:'Zelphos', nameJp:'ゼルフォス', rarity:'zenith', color:0xFEE7A7, glow:true, power:462, guard:432, luck:189, coinValue:19140.0, weight:0.01950 },
+    { id:152, key:'zeryx', name:'Zeryx', nameJp:'ゼリクス', rarity:'zenith', color:0xFFF7E2, glow:true, power:474, guard:444, luck:194, coinValue:19660.0, weight:0.02100 },
+    { id:153, key:'zavelle', name:'Zavelle', nameJp:'ザヴェル', rarity:'zenith', color:0xFFE9BE, glow:true, power:486, guard:456, luck:199, coinValue:20180.0, weight:0.02250 },
+    { id:154, key:'zoreon', name:'Zoreon', nameJp:'ゾレオン', rarity:'zenith', color:0xFFF1C2, glow:true, power:478, guard:468, luck:192, coinValue:20160.0, weight:0.01800 },
+    { id:155, key:'zyrella', name:'Zyrella', nameJp:'ジレラ', rarity:'zenith', color:0xFEE7A7, glow:true, power:490, guard:450, luck:197, coinValue:20680.0, weight:0.01950 },
+  ];
+
+  // Precompute the BASE weight of each tier once (common/uncommon never get
+  // boosted — only rare-and-above scale with stage+luck, so the boost reads
+  // as "better chance at the good stuff" rather than "everything is rarer now").
+
+  const EXTRA_MONSTER_DEFS = [
+    { id:130, key:'aethermyth', name:'AetherMyth', nameJp:'エーテルミス', rarity:'mythos', color:0xF6A1D7, glow:true, power:860, guard:845, luck:260, coinValue:8200.0, weight:0.0042 },
+    { id:131, key:'lumimyth', name:'LumiMyth', nameJp:'ルミミス', rarity:'mythos', color:0xFFB0E2, glow:true, power:842, guard:870, luck:255, coinValue:8100.0, weight:0.0042 },
+    { id:132, key:'astrovale', name:'AstroVale', nameJp:'アストロベイル', rarity:'astral', color:0x95DEFF, glow:true, power:920, guard:900, luck:268, coinValue:9300.0, weight:0.0032 },
+    { id:133, key:'starhymn', name:'StarHymn', nameJp:'スターヒム', rarity:'astral', color:0xB0F0FF, glow:true, power:905, guard:915, luck:270, coinValue:9400.0, weight:0.0032 },
+    { id:134, key:'relicorn', name:'Relicorn', nameJp:'レリコーン', rarity:'relic', color:0xDCC38D, glow:true, power:980, guard:960, luck:280, coinValue:11200.0, weight:0.0024 },
+    { id:135, key:'ancientray', name:'AncientRay', nameJp:'エンシェントレイ', rarity:'relic', color:0xEAD39A, glow:true, power:965, guard:985, luck:275, coinValue:11150.0, weight:0.0024 },
+    { id:136, key:'cosmora', name:'CosmoRa', nameJp:'コズモラ', rarity:'cosmic', color:0x7CEEFF, glow:true, power:1080, guard:1065, luck:292, coinValue:13500.0, weight:0.0017 },
+    { id:137, key:'nebulaarc', name:'NebulaArc', nameJp:'ネビュラアーク', rarity:'cosmic', color:0x8BE8FF, glow:true, power:1095, guard:1050, luck:290, coinValue:13650.0, weight:0.0017 },
+    { id:138, key:'chaosflare', name:'ChaosFlare', nameJp:'カオスフレア', rarity:'chaos', color:0xC57CFF, glow:true, power:1205, guard:1185, luck:305, coinValue:15900.0, weight:0.00115 },
+    { id:139, key:'riftchaos', name:'RiftChaos', nameJp:'リフトカオス', rarity:'chaos', color:0xD18CFF, glow:true, power:1180, guard:1210, luck:310, coinValue:15800.0, weight:0.00115 },
+    { id:140, key:'omegapulse', name:'OmegaPulse', nameJp:'オメガパルス', rarity:'omega', color:0xFF9FC9, glow:true, power:1350, guard:1320, luck:322, coinValue:18600.0, weight:0.0008 },
+    { id:141, key:'omeganova', name:'OmegaNova', nameJp:'オメガノヴァ', rarity:'omega', color:0xFFA7D6, glow:true, power:1335, guard:1360, luck:320, coinValue:18750.0, weight:0.0008 },
+    { id:142, key:'infinicore', name:'InfiniCore', nameJp:'インフィニコア', rarity:'infinity', color:0xFFF28E, glow:true, power:1520, guard:1505, luck:340, coinValue:21400.0, weight:0.00055 },
+    { id:143, key:'infiniray', name:'InfiniRay', nameJp:'インフィニレイ', rarity:'infinity', color:0xFFF6B2, glow:true, power:1508, guard:1522, luck:342, coinValue:21550.0, weight:0.00055 },
+    { id:144, key:'singulavoid', name:'SinguVoid', nameJp:'シングヴォイド', rarity:'singularity', color:0xFFFFFF, glow:true, power:1750, guard:1735, luck:360, coinValue:25800.0, weight:0.00036 },
+    { id:145, key:'singulacrest', name:'SinguCrest', nameJp:'シングクレスト', rarity:'singularity', color:0xF2F2F2, glow:true, power:1775, guard:1710, luck:365, coinValue:26200.0, weight:0.00036 },
+    { id:146, key:'primevoid', name:'PrimeVoid', nameJp:'プライムヴォイド', rarity:'primevoid', color:0xA084FF, glow:true, power:1980, guard:1940, luck:385, coinValue:30500.0, weight:0.00024 },
+    { id:147, key:'primeabyss', name:'PrimeAbyss', nameJp:'プライムアビス', rarity:'primevoid', color:0xB28CFF, glow:true, power:2005, guard:1925, luck:390, coinValue:30800.0, weight:0.00024 },
+    { id:148, key:'godcore', name:'GodCore', nameJp:'ゴッドコア', rarity:'godcore', color:0xFFD96B, glow:true, power:2300, guard:2260, luck:420, coinValue:38000.0, weight:0.00014 },
+    { id:149, key:'godnexus', name:'GodNexus', nameJp:'ゴッドネクサス', rarity:'godcore', color:0xFFE08A, glow:true, power:2330, guard:2285, luck:425, coinValue:38400.0, weight:0.00014 },
+    { id:150, key:'godastral', name:'GodAstral', nameJp:'ゴッドアストラル', rarity:'godcore', color:0xFFEAA0, glow:true, power:2360, guard:2245, luck:430, coinValue:38900.0, weight:0.00014 },
+  ];
+
+  const EXTRA_ULTIMATE_MONSTER_DEFS = [
+    { id:156, key:'auraburst', name:'AuraBurst', nameJp:'オーラバースト', rarity:'abyssal', color:0x4B2E83, glow:true, power:560, guard:610, luck:210, coinValue:24000.0, weight:0.000060 },
+    { id:157, key:'hexapulse', name:'HexaPulse', nameJp:'ヘキサパルス', rarity:'abyssal', color:0x5A3AA8, glow:true, power:585, guard:598, luck:216, coinValue:24500.0, weight:0.000060 },
+    { id:158, key:'prismcrown', name:'PrismCrown', nameJp:'プリズムクラウン', rarity:'prismatic', color:0x4DFFF3, glow:true, power:620, guard:640, luck:224, coinValue:36000.0, weight:0.000045 },
+    { id:159, key:'radiantide', name:'RadianTide', nameJp:'ラディアンタイド', rarity:'prismatic', color:0x85FFF0, glow:true, power:635, guard:626, luck:230, coinValue:37200.0, weight:0.000045 },
+    { id:160, key:'eclipseon', name:'Eclipseon', nameJp:'エクリプシオン', rarity:'eclipse', color:0x6B5BFF, glow:true, power:690, guard:670, luck:238, coinValue:54000.0, weight:0.000032 },
+    { id:161, key:'nightflare', name:'NightFlare', nameJp:'ナイトフレア', rarity:'eclipse', color:0x9A7CFF, glow:true, power:702, guard:688, luck:244, coinValue:56000.0, weight:0.000032 },
+    { id:162, key:'paradoxia', name:'Paradoxia', nameJp:'パラドクシア', rarity:'paradox', color:0xFF6AA2, glow:true, power:760, guard:744, luck:252, coinValue:82000.0, weight:0.000022 },
+    { id:163, key:'voidaria', name:'VoidAria', nameJp:'ヴォイドアリア', rarity:'paradox', color:0xFF92C0, glow:true, power:775, guard:768, luck:258, coinValue:86000.0, weight:0.000022 },
+    { id:164, key:'nirvash', name:'Nirvash', nameJp:'ニルヴァッシュ', rarity:'nirvana', color:0xF8D66D, glow:true, power:835, guard:820, luck:268, coinValue:124000.0, weight:0.000016 },
+    { id:165, key:'astralis', name:'Astralis', nameJp:'アストラリス', rarity:'astrum', color:0x9FE8FF, glow:true, power:900, guard:882, luck:278, coinValue:182000.0, weight:0.000011 },
+    { id:166, key:'voidstar', name:'VoidStar', nameJp:'ヴォイドスター', rarity:'voidstar', color:0x7C4DFF, glow:true, power:980, guard:960, luck:292, coinValue:266000.0, weight:0.000008 },
+    { id:167, key:'genesisflare', name:'GenesisFlare', nameJp:'ジェネシスフレア', rarity:'genesis', color:0x7DFFB8, glow:true, power:1060, guard:1040, luck:304, coinValue:420000.0, weight:0.000006 },
+    { id:168, key:'overcore', name:'OverCore', nameJp:'オーバーコア', rarity:'overcore', color:0xFF8A4D, glow:true, power:1180, guard:1140, luck:318, coinValue:700000.0, weight:0.000004 },
+    { id:169, key:'aphelion', name:'Aphelion', nameJp:'アフェリオン', rarity:'aphelion', color:0xFFFFFF, glow:true, power:1320, guard:1280, luck:332, coinValue:1000000.0, weight:0.000003 },
+    { id:170, key:'aphelionprime', name:'AphelionPrime', nameJp:'アフェリオン・プライム', rarity:'aphelion', color:0xFFF2D6, glow:true, power:1380, guard:1330, luck:340, coinValue:1200000.0, weight:0.000003 },
+  ];
+
+  MONSTER_DEFS.push(...EXTRA_MONSTER_DEFS, ...EXTRA_ULTIMATE_MONSTER_DEFS);
+  const BASE_TOTAL_WEIGHT = MONSTER_DEFS.reduce((s,m)=>s+m.weight, 0);
+  const UNBOOSTED_TIERS = new Set(['common','uncommon']);
+
+  // A very low rarity weight table so rare monsters stay genuinely rare.
+  // Common/uncommon are kept mostly intact; rare+ tiers are heavily damped.
+  const RARITY_WEIGHT_MULTIPLIER = {
+    common: 1.0,
+    uncommon: 0.444444,
+    rare: 0.1125,
+    epic: 0.0625,
+    legendary: 0.046875,
+    mythic: 0.0625,
+    divine: 0.00210084,
+    celestial: 0.00174825,
+    primordial: 0.00170455,
+    eternal: 0.00555556,
+    ascendant: 0.00375,
+    transcendent: 0.00555556,
+    apex: 0.01,
+    mythos: 0.0042,
+    astral: 0.0032,
+    relic: 0.0024,
+    cosmic: 0.0017,
+    chaos: 0.00115,
+    omega: 0.0008,
+    infinity: 0.00055,
+    singularity: 0.00036,
+    primevoid: 0.00024,
+    godcore: 0.00014,
+    zenith: 0.00008,
+  };
+
+  function pickWeightedMonsterDef(){
+    // The displayed odds remain based on the base table, while the actual
+    // roll uses extra luck-driven bias toward higher rarities.
+    let baseTotal = 0;
+    let total = 0;
+    const baseWeights = [];
+    const effectiveWeights = MONSTER_DEFS.map(def=>{
+      const rarityMul = RARITY_WEIGHT_MULTIPLIER[def.rarity] ?? 1;
+      const charBias = monsterChanceFactor(def);
+      const baseWeight = def.weight * rarityMul * charBias;
+      const boost = rarityLuckBoost(def);
+      const w = baseWeight * boost;
+      baseWeights.push(baseWeight);
+      baseTotal += baseWeight;
+      total += w;
+      return w;
+    });
+    let r = Math.random() * total;
+    for(let i=0;i<MONSTER_DEFS.length;i++){
+      if(r < effectiveWeights[i]){
+        return { def: MONSTER_DEFS[i], chance: baseWeights[i] / baseTotal };
+      }
+      r -= effectiveWeights[i];
+    }
+    return { def: MONSTER_DEFS[0], chance: baseWeights[0] / baseTotal };
+  }
+
+  /* =========================================================
+     GAME STATE
+  ========================================================= */
+  /* =========================================================
+     GAME STATE
+  ========================================================= */
+  const GameState = {
+    coins: 150,
+    wildMonsters: [],     // monsters standing free on the island, not yet owned: {id,defId,x,z}
+    party: [],            // ALL owned monsters (the full roster, whether deployed or not): {id,defId,deployed}
+    thief: null,
+    nextEntityId: 1,
+    islandRadius: 14.0,   // widened island (was 9.0)
+    mounds: [],           // {id,x,z,state:'growing'|'ready'|'holding'|'done', growAt, spawnDefId, holdProgress}
+    moundInterval: 15000,
+    lastMoundAt: 0,
+    battleActive: false,
+    maxParty: 40,
+    thiefInterval: 40000, // thief spawn interval, was 18000 — enemies now come less often
+
+    // --- Stage progression ---
+    stage: 1,                 // current stage; higher stage = better rare-monster odds
+    lastIncomeAt: 0,          // timestamp of last passive-income tick
+
+    // --- Permanent Luck ---
+    luckLevel: 0,             // how many times the player has purchased a luck upgrade
+  };
+
+  // Stage N requires this many coins to advance to N+1. Costs escalate so later
+  // stages are a real investment, not a rubber-stamp.
+  function stageCost(stage){
+    return Math.round(200 * Math.pow(1.75, stage - 1));
+  }
+
+  // Passive income now comes from each deployed monster separately.
+  // Stronger / rarer monsters earn more, so a bigger party actually matters.
+  const INCOME_BY_RARITY = {
+    common: 0.24,
+    uncommon: 0.48,
+    rare: 1.35,
+    epic: 3.4,
+    legendary: 8.8,
+    mythic: 19.0,
+    divine: 46.0,
+    celestial: 118.0,
+    primordial: 300.0,
+    eternal: 720.0,
+    ascendant: 1650.0,
+    transcendent: 3800.0,
+    apex: 8600.0,
+    mythos: 19500.0,
+    astral: 44000.0,
+    relic: 98000.0,
+    cosmic: 220000.0,
+    chaos: 500000.0,
+    omega: 1100000.0,
+    infinity: 2300000.0,
+    singularity: 4900000.0,
+    primevoid: 9800000.0,
+    godcore: 19000000.0,
+    zenith: 38000000.0,
+    abyssal: 76000000.0,
+    prismatic: 145000000.0,
+    eclipse: 280000000.0,
+    paradox: 520000000.0,
+    nirvana: 980000000.0,
+    astrum: 1800000000.0,
+    voidstar: 3300000000.0,
+    genesis: 6200000000.0,
+    overcore: 12000000000.0,
+    aphelion: 23000000000.0,
+  };
+  function rarityRewardMultiplier(def){
+    const idx = Math.max(0, RARITY_ORDER.indexOf(def.rarity));
+    const progress = idx / Math.max(1, RARITY_ORDER.length - 1);
+    return 1 + Math.pow(progress, 1.8) * 12.0;
+  }
+  function incomePerMonster(def, level=0){
+    const base = (INCOME_BY_RARITY[def.rarity] ?? 0.2) + Math.sqrt(Math.max(1, def.coinValue)) * 0.12;
+    return base * rarityRewardMultiplier(def) * Math.pow(1.22, level);
+  }
+  function incomePerSecond(){
+    return GameState.party.reduce((sum, p)=>{
+      const def = MONSTER_DEFS.find(d=>d.id===p.defId);
+      return sum + (def ? incomePerMonster(def, p.level || 0) : 0);
+    }, 0);
+  }
+  function monsterUpgradeCost(p){
+    const def = MONSTER_DEFS.find(d=>d.id===p.defId);
+    if(!def) return Infinity;
+    const base = Math.max(18, incomePerMonster(def, p.level || 0) * 120);
+    return Math.round(base * Math.pow(1.45, p.level || 0));
+  }
+
+  // Permanent luck now rises by x1.2 each purchase, instead of adding a small
+  // flat amount. Stage still helps a little, but it is intentionally mild.
+  function luckMultiplier(){
+    const purchasedBonus = Math.pow(1.45, GameState.luckLevel);
+    const stageBonus = 1 + (GameState.stage - 1) * 0.03;
+    return Math.min(1000000000000000, purchasedBonus * stageBonus);
+  }
+
+  // Cost to buy the next luck level; escalates so stacking infinite luck
+  // isn't trivial once you're several levels in.
+  function luckUpgradeCost(){
+    return Math.round(120 * Math.pow(1.9, GameState.luckLevel));
+  }
+
+  function partyLimitUpgradeCost(){
+    const stepLevel = Math.max(0, Math.floor((GameState.maxParty - 40) / 5));
+    return Math.round(250 * Math.pow(1.42, stepLevel));
+  }
+
+  // Combined boost applied to rare-and-above monster weights.
+  // Common/uncommon stay close to the base table, while rare+ tiers get
+  // increasingly more weight as luck rises so the upper rarities appear
+  // noticeably more often at very high luck.
+  function rarityLuckBoost(def){
+    if(UNBOOSTED_TIERS.has(def.rarity)) return 1;
+
+    const luckMult = Math.max(1, luckMultiplier());
+    const luckScale = Math.min(1, Math.log10(luckMult) / 15); // 1e15 => 1.0
+    const stageScale = Math.min(1, Math.max(0, GameState.stage - 1) / 40);
+
+    const rarityIndex = Math.max(0, RARITY_ORDER.indexOf(def.rarity));
+    const rareIndex = Math.max(0, RARITY_ORDER.indexOf('rare'));
+    const upperTierIndex = Math.max(0, rarityIndex - rareIndex); // rare = 0
+    const upperTierSpan = Math.max(1, RARITY_ORDER.length - 1 - rareIndex);
+    const upperTier = upperTierIndex / upperTierSpan; // 0..1
+
+    const baseBoost = 1 + (luckScale * 18) + (stageScale * 2.5);
+    const heavyBoost = 1 + Math.pow(upperTier, 1.7) * luckScale * 9000;
+    const apexBoost = Math.pow(1 + luckScale * 90, upperTier * 5.2);
+
+    return Math.min(1000000000000000, baseBoost * heavyBoost * apexBoost);
+  }
+
+  // Each monster gets a slight, deterministic odds bias so that even inside the
+  // same rarity band some characters are a bit easier or harder to roll.
+  function monsterChanceFactor(def){
+    const seed = (def.id * 1103515245 + 12345) >>> 0;
+    const t = (seed % 1000) / 999;
+    return 0.9 + t * 0.2; // 0.90x ~ 1.10x
+  }
+
+  function formatChancePercentValue(pct){
+    const n = Number(pct);
+    if(!Number.isFinite(n)) return '0';
+    const abs = Math.abs(n);
+    let digits = 2;
+    if(abs < 1){
+      digits = abs >= 0.01 ? 4 : abs >= 0.0001 ? 6 : abs >= 0.000001 ? 8 : 12;
+    }
+    let text = n.toFixed(digits);
+    text = text.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '').replace(/^-0$/, '0');
+    return text;
+  }
+
+  function formatChancePercent(chance){
+    return formatChancePercentValue(Number(chance) * 100);
+  }
+
+  function formatChanceOdds(chance){
+    const n = Number(chance);
+    if(!(n > 0) || !Number.isFinite(n)) return '';
+    const inv = 1 / n;
+    if(!Number.isFinite(inv)) return '';
+    const rounded = Math.round(inv);
+    const diff = Math.abs(inv - rounded);
+    if(diff < 0.005){
+      return '1/' + rounded.toLocaleString('ja-JP');
+    }
+    return '1/' + inv.toLocaleString('ja-JP', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+  }
+
+  function formatChanceLabel(chance){
+    const pct = formatChancePercent(chance);
+    const odds = formatChanceOdds(chance);
+    return odds ? `${pct}% (${odds})` : `${pct}%`;
+  }
+
+  const LARGE_NUMBER_UNITS = ['', '万', '億', '兆', '京', '垓', '秭', '穣', '溝', '澗', '正', '載', '極', '恒河沙', '阿僧祇', '那由他', '不可思議', '無量大数'];
+
+  function formatCompactNumber(value, decimals = 2){
+    const n = Number(value);
+    if(!Number.isFinite(n)) return '0';
+    const sign = n < 0 ? '-' : '';
+    let abs = Math.abs(n);
+    if(abs < 10000){
+      const fixed = abs % 1 === 0 ? 0 : decimals;
+      return sign + abs.toLocaleString('ja-JP', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: fixed,
+      });
+    }
+    let unitIndex = 0;
+    while(abs >= 10000 && unitIndex < LARGE_NUMBER_UNITS.length - 1){
+      abs /= 10000;
+      unitIndex++;
+    }
+    const fracDigits = abs < 10 ? decimals : abs < 100 ? Math.min(1, decimals) : 0;
+    const body = abs.toFixed(fracDigits);
+    return `${sign}${body}${LARGE_NUMBER_UNITS[unitIndex]}`;
+  }
+
+  function formatCoinAmount(value){
+    return formatCompactNumber(Math.floor(Number(value) || 0), 2);
+  }
+
+  function formatMultiplierAmount(value){
+    const n = Number(value);
+    if(!Number.isFinite(n)) return 'x0.00';
+    return `x${formatCompactNumber(n, 2)}`;
+  }
+
+  /* -------- Audio FX (Web Audio, no external assets) -------- */
+  const AudioFX = { ctx:null, master:null, unlocked:false };
+
+  function ensureAudioContext(){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return null;
+    if(!AudioFX.ctx){
+      try{
+        AudioFX.ctx = new AC();
+        AudioFX.master = AudioFX.ctx.createGain();
+        AudioFX.master.gain.value = 0.06;
+        AudioFX.master.connect(AudioFX.ctx.destination);
+      }catch(err){
+        console.warn('Pick Up Monster: audio init failed', err);
+        return null;
+      }
+    }
+    return AudioFX.ctx;
+  }
+
+  function unlockAudio(){
+    const ctx = ensureAudioContext();
+    if(!ctx) return;
+    if(ctx.state === 'suspended'){
+      ctx.resume().catch(()=>{});
+    }
+    AudioFX.unlocked = true;
+  }
+
+  window.addEventListener('pointerdown', unlockAudio, { passive:true });
+  window.addEventListener('touchstart', unlockAudio, { passive:true });
+  window.addEventListener('keydown', unlockAudio);
+
+  function playTone({ type='sine', start=440, end=null, duration=120, gain=0.05, delay=0, attack=0.01, release=0.08 } = {}){
+    const ctx = ensureAudioContext();
+    if(!ctx || !AudioFX.master) return;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(Math.max(40, start), ctx.currentTime + delay);
+    if(end != null){
+      osc.frequency.exponentialRampToValueAtTime(Math.max(40, end), ctx.currentTime + delay + Math.max(0.02, duration / 1000));
+    }
+    g.gain.setValueAtTime(0.0001, ctx.currentTime + delay);
+    g.gain.linearRampToValueAtTime(gain, ctx.currentTime + delay + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + delay + Math.max(0.03, duration / 1000) + release);
+    osc.connect(g);
+    g.connect(AudioFX.master);
+    osc.start(ctx.currentTime + delay);
+    osc.stop(ctx.currentTime + delay + Math.max(0.05, duration / 1000) + release + 0.02);
+  }
+
+  function playNoiseBurst({ gain=0.02, duration=180, delay=0 } = {}){
+    const ctx = ensureAudioContext();
+    if(!ctx || !AudioFX.master) return;
+    const bufferSize = Math.max(1, Math.floor(ctx.sampleRate * (duration / 1000)));
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i=0;i<bufferSize;i++){
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    }
+    const src = ctx.createBufferSource();
+    const g = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 1200;
+    src.buffer = buffer;
+    g.gain.setValueAtTime(0.0001, ctx.currentTime + delay);
+    g.gain.linearRampToValueAtTime(gain, ctx.currentTime + delay + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + delay + duration / 1000);
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(AudioFX.master);
+    src.start(ctx.currentTime + delay);
+    src.stop(ctx.currentTime + delay + duration / 1000 + 0.02);
+  }
+
+  function playCatchSound(def, chance){
+    const pct = Number(chance) * 100;
+    const tier = pct <= 0.0001 ? 4 : pct <= 0.001 ? 3 : pct <= 0.01 ? 2 : pct <= 0.1 ? 1 : 0;
+    const base = 240 + ((def?.id || 1) % 12) * 22;
+    if(tier === 0){
+      playTone({ type:'triangle', start:base, end:base * 1.18, duration:85, gain:0.022 });
+      return;
+    }
+    playTone({ type:'triangle', start:base, end:base * 1.55, duration:110, gain:0.03 });
+    playTone({ type:'sine', start:base * 1.5, end:base * 2.35, duration:160, gain:tier >= 3 ? 0.055 : 0.035, delay:0.06 });
+    playTone({ type:'square', start:base * 2.1, end:base * 3.2, duration:130, gain:tier >= 3 ? 0.028 : 0.018, delay:0.12 });
+    if(tier >= 2){
+      playNoiseBurst({ gain:tier >= 3 ? 0.03 : 0.018, duration:tier >= 3 ? 220 : 150, delay:0.05 });
+    }
+    if(tier >= 3){
+      playTone({ type:'sawtooth', start:base * 0.9, end:base * 4.4, duration:300, gain:0.028, delay:0.18 });
+      playTone({ type:'sine', start:base * 3.2, end:base * 5.0, duration:240, gain:0.02, delay:0.24 });
+    }
+  }
+
+  // Mound spawn speed gets 0.1s faster each stage.
+  function moundSpawnIntervalMs(){
+    const base = Number.isFinite(GameState.moundInterval) ? GameState.moundInterval : 15000;
+    return Math.max(3000, base - (GameState.stage - 1) * 100);
+  }
+
+  // helper: all owned monsters earn, even if they are waiting in the inventory
+  function deployedParty(){
+    return GameState.party.filter(p=>p.deployed);
+  }
+
+  /* =========================================================
+     SAVE / LOAD — persist the inventory (captured monsters +
+     their deploy state) and coin count across sessions using
+     localStorage. Wild monsters, mounds, and the thief are all
+     transient and are intentionally NOT saved: they're just
+     what happens to be on the island right now, not something
+     the player "owns". party + coins + stage + luck are the
+     things the player has earned and should never lose on a
+     refresh.
+  ========================================================= */
+  const SAVE_KEY = 'pickUpMonster.save.v2';
+
+  function saveGame(){
+    try{
+      const payload = {
+        v: 2,
+        coins: GameState.coins,
+        nextEntityId: GameState.nextEntityId,
+        party: GameState.party.map(p=>({ id:p.id, defId:p.defId, deployed:p.deployed, level:p.level || 0 })),
+        stage: GameState.stage,
+        luckLevel: GameState.luckLevel,
+        maxParty: GameState.maxParty,
+        moundInterval: GameState.moundInterval,
+        thiefInterval: GameState.thiefInterval,
+      };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+    }catch(err){
+      // storage can fail (quota, privacy mode, etc). Losing autosave shouldn't crash the game.
+      console.warn('Pick Up Monster: save failed', err);
+    }
+  }
+
+  // Debounced save: several state changes can happen in the same frame
+  // (e.g. catching a monster then instantly opening the inventory), so
+  // batch them into a single write instead of hitting localStorage repeatedly.
+  let saveQueued = false;
+  function queueSave(){
+    if(saveQueued) return;
+    saveQueued = true;
+    setTimeout(()=>{ saveQueued = false; saveGame(); }, 250);
+  }
+
+  function loadGame(){
+    let raw;
+    try{
+      raw = localStorage.getItem(SAVE_KEY);
+    }catch(err){
+      console.warn('Pick Up Monster: load failed', err);
+      return false;
+    }
+    if(!raw) return false;
+    let data;
+    try{
+      data = JSON.parse(raw);
+    }catch(err){
+      console.warn('Pick Up Monster: save data corrupted, ignoring', err);
+      return false;
+    }
+    if(!data || !Array.isArray(data.party)) return false;
+
+    if(typeof data.coins === 'number' && isFinite(data.coins)) GameState.coins = data.coins;
+    if(typeof data.stage === 'number' && isFinite(data.stage) && data.stage>=1) GameState.stage = Math.floor(data.stage);
+    if(typeof data.luckLevel === 'number' && isFinite(data.luckLevel) && data.luckLevel>=0) GameState.luckLevel = Math.floor(data.luckLevel);
+    if(typeof data.maxParty === 'number' && isFinite(data.maxParty) && data.maxParty>=1) GameState.maxParty = Math.floor(data.maxParty);
+    if(typeof data.moundInterval === 'number' && isFinite(data.moundInterval) && data.moundInterval>=1000) GameState.moundInterval = Math.floor(data.moundInterval);
+    if(typeof data.thiefInterval === 'number' && isFinite(data.thiefInterval) && data.thiefInterval>=1000) GameState.thiefInterval = Math.floor(data.thiefInterval);
+    GameState.maxParty = Math.max(GameState.maxParty, GameState.party.length);
+
+    let maxId = GameState.nextEntityId;
+    GameState.party = [];
+    data.party.forEach(saved=>{
+      // guard against a save referencing a monster id that no longer exists
+      // (e.g. after a future content update) so a stale save can't crash boot
+      const def = MONSTER_DEFS.find(d=>d.id===saved.defId);
+      if(!def) return;
+      const p = { id: saved.id, defId: saved.defId, deployed: !!saved.deployed, level: Math.max(0, Math.floor(saved.level || 0)) };
+      GameState.party.push(p);
+      if(typeof saved.id === 'number' && saved.id >= maxId) maxId = saved.id+1;
+    });
+    if(typeof data.nextEntityId === 'number' && data.nextEntityId > maxId) maxId = data.nextEntityId;
+    GameState.nextEntityId = maxId;
+
+    return true;
+  }
+
+  /* =========================================================
+     THREE.JS SETUP
+  ========================================================= */
+  const wrap = document.getElementById('canvas-wrap');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xBFEFFF);
+  scene.fog = new THREE.Fog(0xBFEFFF, 20, 58); // pushed out so the wider island doesn't fade into fog too early
+
+  const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 100);
+
+  const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  wrap.appendChild(renderer.domElement);
+  // Canvas itself must not be selectable/draggable either — on some mobile
+  // browsers (notably iOS Safari-based ones) a press-and-hold on a <canvas>
+  // can still trigger the native text-selection/callout UI even with
+  // user-select:none on <body>, which is exactly the full-screen blue
+  // selection overlay seen in the bug report. Locking it down here at the
+  // element level closes that gap.
+  renderer.domElement.style.userSelect = 'none';
+  renderer.domElement.style.webkitUserSelect = 'none';
+  renderer.domElement.style.touchAction = 'none';
+  renderer.domElement.setAttribute('draggable', 'false');
+
+  const hemi = new THREE.HemisphereLight(0xffffff, 0xC9A8FF, 0.9);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffffff, 1.05);
+  sun.position.set(6, 14, 6);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024,1024);
+  sun.shadow.camera.left = -20; sun.shadow.camera.right = 20;
+  sun.shadow.camera.top = 20; sun.shadow.camera.bottom = -20;
+  scene.add(sun);
+
+  const STAGE_THEMES = [
+    { sky:0xBFEFFF, fog:0xBFEFFF, fogNear:20, fogFar:58, grass:0x8FE388, sand:0xF4E2A8, water:0x5FC7E8, ring:0x7FD673, hemi:0xFFFFFF, ground:0xC9A8FF, sun:0xFFFFFF, sunIntensity:1.05, leaves:0x5FCB6B },
+    { sky:0xFFE4D0, fog:0xFFE4D0, fogNear:18, fogFar:54, grass:0x89D97D, sand:0xF0CC96, water:0x69BCE8, ring:0x67C76C, hemi:0xFFF2E6, ground:0xFFB88A, sun:0xFFE1B8, sunIntensity:1.0, leaves:0x67C96A },
+    { sky:0xD9E4FF, fog:0xD9E4FF, fogNear:18, fogFar:52, grass:0x7CCF8A, sand:0xD8D0B0, water:0x7AA8FF, ring:0x6E8FF0, hemi:0xFFFFFF, ground:0xA9B8FF, sun:0xC9D6FF, sunIntensity:0.95, leaves:0x5ABF9F },
+    { sky:0xE8D9FF, fog:0xE8D9FF, fogNear:17, fogFar:48, grass:0x6DAF73, sand:0xD8C49A, water:0x7291D9, ring:0x8B6FD7, hemi:0xF4E7FF, ground:0xD0A3FF, sun:0xE0C6FF, sunIntensity:0.9, leaves:0x80B96A },
+    { sky:0xDFF8EF, fog:0xDFF8EF, fogNear:16, fogFar:50, grass:0x7FCFA1, sand:0xDDE3B0, water:0x67D0C8, ring:0x57CFC1, hemi:0xF4FFFA, ground:0xA7F1DC, sun:0xD8FFF0, sunIntensity:0.98, leaves:0x6BBB8A },
+  ];
+  function getStageTheme(stage){
+    return STAGE_THEMES[(Math.max(1, stage)-1) % STAGE_THEMES.length];
+  }
+  function applyStageVisuals(stage){
+    const t = getStageTheme(stage);
+    scene.background.setHex(t.sky);
+    if(scene.fog){
+      scene.fog.color.setHex(t.fog);
+      scene.fog.near = t.fogNear;
+      scene.fog.far = t.fogFar;
+    }
+    grass.material.color.setHex(t.grass);
+    sand.material.color.setHex(t.sand);
+    water.material.color.setHex(t.water);
+    ring.material.color.setHex(t.ring);
+    hemi.color.setHex(t.hemi);
+    hemi.groundColor.setHex(t.ground);
+    sun.color.setHex(t.sun);
+    sun.intensity = t.sunIntensity;
+    treeLeafMaterials.forEach(mat=>mat.color.setHex(t.leaves));
+  }
+
+  /* ---------- Island ground ---------- */
+  const islandGroup = new THREE.Group();
+  scene.add(islandGroup);
+
+  const grassMat = new THREE.MeshStandardMaterial({ color:0x8FE388, roughness:0.9 });
+  const grassGeo = new THREE.CylinderGeometry(GameState.islandRadius, GameState.islandRadius, 0.6, 48);
+  const grass = new THREE.Mesh(grassGeo, grassMat);
+  grass.position.y = -0.3;
+  grass.receiveShadow = true;
+  islandGroup.add(grass);
+
+  const sandMat = new THREE.MeshStandardMaterial({ color:0xF4E2A8, roughness:1.0 });
+  const sandGeo = new THREE.CylinderGeometry(GameState.islandRadius+0.55, GameState.islandRadius+0.7, 0.4, 48);
+  const sand = new THREE.Mesh(sandGeo, sandMat);
+  sand.position.y = -0.55;
+  sand.receiveShadow = true;
+  islandGroup.add(sand);
+
+  const ringGeo = new THREE.RingGeometry(GameState.islandRadius-0.15, GameState.islandRadius-0.02, 48);
+  const ringMat = new THREE.MeshBasicMaterial({ color:0x7FD673, transparent:true, opacity:0.5, side:THREE.DoubleSide });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI/2;
+  ring.position.y = 0.005;
+  islandGroup.add(ring);
+
+  const treeLeafMaterials = [];
+  function makeTree(x,z,scale){
+    const g = new THREE.Group();
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09,0.13,0.6,6),
+      new THREE.MeshStandardMaterial({color:0xB98354, roughness:0.9})
+    );
+    trunk.position.y = 0.3; trunk.castShadow = true;
+    const leafMat = new THREE.MeshStandardMaterial({color:0x5FCB6B, roughness:0.8});
+    treeLeafMaterials.push(leafMat);
+    const leaves = new THREE.Mesh(
+      new THREE.SphereGeometry(0.45,10,10),
+      leafMat
+    );
+    leaves.position.y = 0.78; leaves.castShadow = true;
+    g.add(trunk, leaves);
+    g.position.set(x,0,z);
+    g.scale.setScalar(scale);
+    return g;
+  }
+  // tree spot coordinates scaled up along with the island radius (was tuned for radius 9,
+  // island is now radius 14, so positions are scaled by the same ~1.556x factor)
+  const treeSpots = [
+    [-11.2,-5.1,1.1],[10.9,-6.2,0.9],[-10.3,6.8,1.0],[11.3,6.2,1.05],[0,-11.5,0.95],[-4.7,10.1,1.0],[6.2,10.6,0.9],
+    // a few extra trees so the larger island doesn't feel emptier than before
+    [-13.5,1.5,1.0],[13.2,-1.2,1.05],[2.0,-13.0,0.95],[-2.5,13.2,1.0]
+  ];
+  treeSpots.forEach(([x,z,s])=> islandGroup.add(makeTree(x,z,s)));
+
+  const waterGeo = new THREE.CircleGeometry(52, 48); // widened to match the larger island (was 34)
+  const waterMat = new THREE.MeshStandardMaterial({ color:0x5FC7E8, roughness:0.35, metalness:0.05 });
+  const water = new THREE.Mesh(waterGeo, waterMat);
+  water.rotation.x = -Math.PI/2;
+  water.position.y = -0.9;
+  water.receiveShadow = true;
+  scene.add(water);
+
+  /* ---------- Capsule helper (three r128 has no CapsuleGeometry) ---------- */
+  function buildCapsuleMesh(radius, cylHeight, material){
+    const g = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, cylHeight, 12), material);
+    const capTop = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 8), material);
+    capTop.position.y = cylHeight/2;
+    const capBottom = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 8), material);
+    capBottom.position.y = -cylHeight/2;
+    g.add(shaft, capTop, capBottom);
+    g.traverse(o=>{ if(o.isMesh) o.castShadow = true; });
+    return g;
+  }
+
+  /* ---------- Thief character ---------- */
+  function buildThief(){
+    const g = new THREE.Group();
+    const body = buildCapsuleMesh(0.3, 0.34, new THREE.MeshStandardMaterial({ color:0x3B3450, roughness:0.5 }));
+    body.position.y = 0.48;
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.26, 16,16),
+      new THREE.MeshStandardMaterial({ color:0x3B3450, roughness:0.5 })
+    );
+    head.position.y = 0.95;
+    head.castShadow = true;
+    const eyeMat = new THREE.MeshStandardMaterial({color:0xFF5D6C, emissive:0xFF5D6C, emissiveIntensity:0.6});
+    const eyeGeo = new THREE.SphereGeometry(0.05,8,8);
+    const eyeL = new THREE.Mesh(eyeGeo, eyeMat); eyeL.position.set(-0.09,0.97,0.22);
+    const eyeR = new THREE.Mesh(eyeGeo, eyeMat); eyeR.position.set(0.09,0.97,0.22);
+    g.add(body, head, eyeL, eyeR);
+    g.visible = false;
+    return g;
+  }
+  const thiefMesh = buildThief();
+  scene.add(thiefMesh);
+
+  /* ---------- Monster mesh factory ---------- */
+  function buildMonsterMesh(def){
+    const g = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color:def.color, roughness:0.42,
+      emissive: def.glow ? def.color : 0x000000,
+      emissiveIntensity: def.glow ? 0.35 : 0,
+    });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.4,20,20), bodyMat);
+    body.scale.set(1,0.9,1);
+    body.position.y = 0.4;
+    body.castShadow = true;
+    const eyeWhiteGeo = new THREE.SphereGeometry(0.095,10,10);
+    const eyeWhiteMat = new THREE.MeshStandardMaterial({color:0xffffff});
+    const eyeL = new THREE.Mesh(eyeWhiteGeo, eyeWhiteMat); eyeL.position.set(-0.14,0.48,0.32);
+    const eyeR = new THREE.Mesh(eyeWhiteGeo, eyeWhiteMat); eyeR.position.set(0.14,0.48,0.32);
+    const pupilGeo = new THREE.SphereGeometry(0.048,8,8);
+    const pupilMat = new THREE.MeshStandardMaterial({color:0x2D2A4A});
+    const pL = new THREE.Mesh(pupilGeo,pupilMat); pL.position.set(-0.13,0.48,0.4);
+    const pR = new THREE.Mesh(pupilGeo,pupilMat); pR.position.set(0.15,0.48,0.4);
+    const footGeo = new THREE.SphereGeometry(0.11,10,10);
+    const footMat = new THREE.MeshStandardMaterial({color:def.color});
+    const footL = new THREE.Mesh(footGeo, footMat); footL.position.set(-0.17,0.07,0.04); footL.scale.set(1,0.6,1);
+    const footR = new THREE.Mesh(footGeo, footMat); footR.position.set(0.17,0.07,0.04); footR.scale.set(1,0.6,1);
+    g.add(body, eyeL, eyeR, pL, pR, footL, footR);
+
+    // rarity sparkle ring for rare+ monsters
+    if(def.glow){
+      const sparkGeo = new THREE.RingGeometry(0.5,0.56,20);
+      const sparkMat = new THREE.MeshBasicMaterial({color:def.color, transparent:true, opacity:0.55, side:THREE.DoubleSide});
+      const spark = new THREE.Mesh(sparkGeo, sparkMat);
+      spark.rotation.x = -Math.PI/2;
+      spark.position.y = 0.03;
+      g.add(spark);
+      g.userData.sparkRing = spark;
+    }
+    return g;
+  }
+
+  const wildMeshMap = new Map();   // id -> {group,bobPhase,def}
+  const partyMeshMap = new Map();  // id -> {group,bobPhase,def}  (only exists while a monster is DEPLOYED)
+
+  function addWildMonsterMesh(m, def){
+    const mesh = buildMonsterMesh(def);
+    mesh.position.set(m.x, 0, m.z);
+    scene.add(mesh);
+    wildMeshMap.set(m.id, { group:mesh, bobPhase:Math.random()*Math.PI*2, def });
+  }
+  function removeWildMonsterMesh(id){
+    const rec = wildMeshMap.get(id);
+    if(rec){ scene.remove(rec.group); wildMeshMap.delete(id); }
+  }
+  function addPartyMonsterMesh(p, def){
+    const mesh = buildMonsterMesh(def);
+    mesh.scale.setScalar(0.62); // slightly smaller so the trailing party reads as "following", not blocking view
+    scene.add(mesh);
+    partyMeshMap.set(p.id, { group:mesh, bobPhase:Math.random()*Math.PI*2, def });
+  }
+  function removePartyMonsterMesh(id){
+    const rec = partyMeshMap.get(id);
+    if(rec){ scene.remove(rec.group); partyMeshMap.delete(id); }
+  }
+
+  /* ---------- Mound meshes (dirt that grows, then can be dug) ----------
+     Moved from a single brown material to a rainbow gradient look: each
+     mound gets vertex colors sweeping through the hue wheel, so digging
+     spots read as a magical/rare event rather than plain dirt. Vertex
+     colors are used (not a texture) since that's the simplest way to get
+     a smooth multi-color gradient on a low-poly sphere in three r128
+     without loading any extra assets.
+  ---------------------------------------------------------------------- */
+  function applyRainbowVertexColors(geometry){
+    // three r128's SphereGeometry constructor returns a BufferGeometry, not the
+    // old Geometry class — it has no .vertices/.faces arrays. The previous
+    // implementation assumed the legacy Geometry API, which made every property
+    // access here undefined and threw ("Script error" in the console). The fix:
+    // read vertex positions from the position BufferAttribute directly, and
+    // write a matching 'color' BufferAttribute the material can consume.
+    const posAttr = geometry.attributes.position;
+    const count = posAttr.count;
+    const colors = new Float32Array(count*3);
+    const tmpColor = new THREE.Color();
+    for(let i=0;i<count;i++){
+      const y = posAttr.getY(i); // sphere y ranges ~-0.5..0.5
+      const hue = (y*0.5 + 0.5); // -> 0..1
+      tmpColor.setHSL((hue*0.85)%1.0, 0.85, 0.62);
+      colors[i*3] = tmpColor.r;
+      colors[i*3+1] = tmpColor.g;
+      colors[i*3+2] = tmpColor.b;
+    }
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  }
+
+  function moundThemeForStage(stage){
+    const themes = [
+      { mound:0x9A7A52, shine:0xC4A37A },
+      { mound:0x7F6B45, shine:0xA88A61 },
+      { mound:0x6D8E4B, shine:0x9BB36A },
+      { mound:0x8A5B3F, shine:0xC38A63 },
+      { mound:0x667B8A, shine:0x90A8B6 },
+    ];
+    return themes[(Math.max(1, stage)-1) % themes.length];
+  }
+
+  function buildMoundMesh(){
+    const g = new THREE.Group();
+    const theme = moundThemeForStage(GameState.stage);
+    const moundColor = new THREE.Color(theme.mound);
+    moundColor.offsetHSL((Math.random()-0.5)*0.03, (Math.random()-0.5)*0.08, (Math.random()-0.5)*0.06);
+    const dirtGeo = new THREE.SphereGeometry(0.5,16,12);
+    const dirtMat = new THREE.MeshStandardMaterial({
+      color: moundColor,
+      roughness:0.7,
+      metalness:0.04,
+      emissive:new THREE.Color(theme.shine),
+      emissiveIntensity:0.06,
+    });
+    const mound = new THREE.Mesh(dirtGeo, dirtMat);
+    mound.scale.set(1,0.01,1); // starts flat, grows over time
+    mound.position.y = 0.02;
+    mound.castShadow = true;
+    g.add(mound);
+    g.userData.moundMesh = mound;
+    g.userData.hueShift = Math.random()*Math.PI*2; // per-mound phase so they don't all shimmer in sync
+    return g;
+  }
+
+  const moundMeshMap = new Map(); // id -> group
+
+  function spawnMound(opts={}){
+    const forcedDefId = typeof opts.forcedDefId === 'number' ? opts.forcedDefId : null;
+    const readyNow = !!opts.readyNow;
+    const atPlayer = !!opts.atPlayer;
+    const ang = atPlayer ? player.yaw + Math.PI : Math.random()*Math.PI*2;
+    const r = atPlayer ? 1.0 : (1.2 + Math.random()*(GameState.islandRadius-2.2));
+    const x = atPlayer ? player.x + Math.cos(ang)*r : Math.cos(ang)*r;
+    const z = atPlayer ? player.z + Math.sin(ang)*r : Math.sin(ang)*r;
+    const id = GameState.nextEntityId++;
+    const roll = forcedDefId ? { def: MONSTER_DEFS.find(d=>d.id===forcedDefId) || pickWeightedMonsterDef().def, chance: 1 } : pickWeightedMonsterDef();
+    const mound = {
+      id,
+      x,
+      z,
+      state: readyNow ? 'ready' : 'growing',
+      growStart: performance.now(),
+      growDuration: readyNow ? 0 : 2200,
+      spawnDef: roll.def,
+      spawnChance: roll.chance,
+      timingSeed: performance.now() + Math.random()*777,
+    };
+    GameState.mounds.push(mound);
+    const mesh = buildMoundMesh();
+    mesh.position.set(x,0,z);
+    scene.add(mesh);
+    moundMeshMap.set(id, mesh);
+  }
+
+  function removeMoundMesh(id){
+    const mesh = moundMeshMap.get(id);
+    if(mesh){ scene.remove(mesh); moundMeshMap.delete(id); }
+  }
+
+  /* =========================================================
+     FPS CAMERA / MOVEMENT CONTROLS
+     Eye height brought down to a natural human first-person
+     height (was 1.55, felt like a floating overhead view).
+     A subtle head-bob is added while walking so it reads as
+     "I am walking on the ground" rather than a drone hover.
+  ========================================================= */
+  const player = {
+    x:0, z:5, yaw:Math.PI, pitch:-0.02, // yaw: rotation around Y; 0 faces +Z
+    baseHeight:1.15,   // true FPS eye-level (was 1.55 — too high, looked top-down)
+    height:1.15,
+    moveSpeed:3.6,
+    bobPhase:0,
+    bobAmount:0,
+  };
+
+  function updateCamera(){
+    camera.position.set(player.x, player.height, player.z);
+    const lookDir = new THREE.Vector3(
+      Math.sin(player.yaw)*Math.cos(player.pitch),
+      Math.sin(player.pitch),
+      Math.cos(player.yaw)*Math.cos(player.pitch)
+    );
+    camera.lookAt(player.x+lookDir.x, player.height+lookDir.y, player.z+lookDir.z);
+  }
+  updateCamera();
+
+  function clampToIsland(x,z,margin){
+    margin = margin||0.4;
+    const r = GameState.islandRadius - margin;
+    const d = Math.sqrt(x*x+z*z);
+    if(d>r){ const s=r/d; return {x:x*s, z:z*s}; }
+    return {x,z};
+  }
+
+  /* ---------- Virtual joystick (left side, move) ---------- */
+  const joyZone = document.getElementById('joystick-zone');
+  const joyBase = document.getElementById('joystick-base');
+  const joyStick = document.getElementById('joystick-stick');
+  let joyActive = false, joyId = null, joyOrigin = {x:0,y:0};
+  let joyVec = {x:0,y:0}; // normalized -1..1, x=strafe, y=forward(-1)/back(1)
+
+  const JOY_RADIUS = 54;
+
+  // Selection-bug fix: on iOS Safari-family browsers, a pointerdown/move that
+  // isn't fully prevented can still be interpreted as the start of a native
+  // text-selection drag once it leaves the element that received pointerdown
+  // (this is what produced the full-screen blue selection band in the
+  // report — it wasn't a UI bug in this app, it was the OS selection gesture
+  // firing because nothing told it not to). preventDefault() on pointerdown
+  // AND on the window-level selectstart/dragstart events closes every path
+  // that gesture can start from, in addition to the CSS user-select:none
+  // that was already present but not sufficient on its own.
+  function preventDefaultIfPossible(e){ if(e.cancelable) e.preventDefault(); }
+  document.addEventListener('selectstart', preventDefaultIfPossible);
+  document.addEventListener('dragstart', preventDefaultIfPossible);
+  document.addEventListener('contextmenu', preventDefaultIfPossible);
+  document.addEventListener('gesturestart', preventDefaultIfPossible); // iOS Safari pinch/selection magnifier gesture
+
+  joyZone.addEventListener('pointerdown', (e)=>{
+    preventDefaultIfPossible(e);
+    joyActive = true; joyId = e.pointerId;
+    joyOrigin = {x:e.clientX, y:e.clientY};
+    joyBase.style.left = (e.clientX-54)+'px';
+    joyBase.style.top = (e.clientY-54)+'px';
+    joyBase.style.display = 'block';
+    joyStick.style.left = (e.clientX-26)+'px';
+    joyStick.style.top = (e.clientY-26)+'px';
+    joyStick.style.display = 'block';
+    hideHint();
+  });
+  joyZone.addEventListener('pointermove', (e)=>{
+    if(!joyActive || e.pointerId!==joyId) return;
+    preventDefaultIfPossible(e);
+    let dx = e.clientX-joyOrigin.x, dy = e.clientY-joyOrigin.y;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    if(dist > JOY_RADIUS){ dx = dx/dist*JOY_RADIUS; dy = dy/dist*JOY_RADIUS; }
+    joyStick.style.left = (joyOrigin.x+dx-26)+'px';
+    joyStick.style.top = (joyOrigin.y+dy-26)+'px';
+    joyVec.x = dx/JOY_RADIUS;
+    joyVec.y = dy/JOY_RADIUS;
+  });
+  function endJoy(e){
+    if(e.pointerId!==joyId) return;
+    joyActive = false; joyId=null;
+    joyVec.x=0; joyVec.y=0;
+    joyBase.style.display='none';
+    joyStick.style.display='none';
+  }
+  joyZone.addEventListener('pointerup', endJoy);
+  joyZone.addEventListener('pointercancel', endJoy);
+  joyZone.addEventListener('pointerleave', endJoy);
+
+  /* ---------- Look zone (right side, drag to rotate camera) ---------- */
+  const lookZone = document.getElementById('look-zone');
+  let lookActive = false, lookId = null, lastLook = {x:0,y:0};
+  const LOOK_SENS = 0.0032;
+
+  lookZone.addEventListener('pointerdown', (e)=>{
+    preventDefaultIfPossible(e);
+    lookActive = true; lookId = e.pointerId;
+    lastLook = {x:e.clientX, y:e.clientY};
+    hideHint();
+  });
+  lookZone.addEventListener('pointermove', (e)=>{
+    if(!lookActive || e.pointerId!==lookId) return;
+    preventDefaultIfPossible(e);
+    const dx = e.clientX-lastLook.x, dy = e.clientY-lastLook.y;
+    lastLook = {x:e.clientX, y:e.clientY};
+    player.yaw -= dx*LOOK_SENS;
+    player.pitch -= dy*LOOK_SENS;
+    player.pitch = Math.max(-1.1, Math.min(1.1, player.pitch));
+  });
+  function endLook(e){
+    if(e.pointerId!==lookId) return;
+    lookActive=false; lookId=null;
+  }
+  lookZone.addEventListener('pointerup', endLook);
+  lookZone.addEventListener('pointercancel', endLook);
+  lookZone.addEventListener('pointerleave', endLook);
+
+  let hintHidden = false;
+  function hideHint(){
+    if(hintHidden) return;
+    hintHidden = true;
+    const el = document.getElementById('hint');
+    if(el){ el.style.opacity = '0'; setTimeout(()=>el.remove(), 500); }
+  }
+
+  /* =========================================================
+     MOUND TIMING-TO-DIG INTERACTION
+     Show a real button and let the player tap it when the needle
+     overlaps the green zone.
+  ========================================================= */
+  const moundPrompt = document.getElementById('mound-prompt');
+  const moundRingFg = document.getElementById('mound-ring-fg');
+  const moundLabel = document.getElementById('mound-label');
+  const moundNeedle = document.getElementById('mound-timing-needle');
+  const moundActionBtn = document.getElementById('mound-action-btn');
+  const RING_CIRCUMFERENCE = 207;
+  let nearbyReadyMound = null;
+  const TIMING_CYCLE = 1400;
+  const TIMING_WINDOW = { start: 0.43, end: 0.56 };
+
+  function timingPhase(now, mound){
+    return ((now - mound.timingSeed) % TIMING_CYCLE) / TIMING_CYCLE;
+  }
+  function attemptTimingDig(now){
+    if(!nearbyReadyMound) return;
+    const phase = timingPhase(now, nearbyReadyMound);
+    if(phase >= TIMING_WINDOW.start && phase <= TIMING_WINDOW.end){
+      finishDig(nearbyReadyMound);
+    } else {
+      showBanner('ズレた! もう一度タイミングを合わせて', null);
+    }
+  }
+  moundActionBtn.addEventListener('click', (e)=>{
+    if(!nearbyReadyMound) return;
+    preventDefaultIfPossible(e);
+    attemptTimingDig(performance.now());
+  });
+  moundActionBtn.addEventListener('pointerdown', preventDefaultIfPossible);
+
+  /* =========================================================
+     UI WIRING
+  ========================================================= */
+  /* =========================================================
+     UI WIRING
+  ========================================================= */
+  const coinValEl = document.getElementById('coin-val');
+  const monsterValEl = document.getElementById('monster-val');
+  const popupLayer = document.getElementById('popup-layer');
+  const bannerWrap = document.getElementById('banner-wrap');
+  const partyStrip = document.getElementById('party-strip');
+  const stageValEl = document.getElementById('stage-val');
+  const stageCostValEl = document.getElementById('stage-cost-val');
+  const stageBtnEl = document.getElementById('stage-btn');
+  const luckValEl = document.getElementById('luck-val');
+  const luckCostValEl = document.getElementById('luck-cost-val');
+  const luckBtnEl = document.getElementById('luck-btn');
+  const partyLimitValEl = document.getElementById('party-limit-val');
+  const partyLimitCostValEl = document.getElementById('party-limit-cost-val');
+  const partyLimitBtnEl = document.getElementById('party-limit-btn');
+  const captureFxLayer = document.getElementById('capture-fx-layer');
+  const adminOverlay = document.getElementById('admin-overlay');
+  const adminCloseEl = document.getElementById('admin-close');
+  const adminOpenBtn = document.getElementById('admin-open-btn');
+  const adminCodeOverlay = document.getElementById('admin-code-overlay');
+  const adminCodeInput = document.getElementById('admin-code-input');
+  const adminCodeCancel = document.getElementById('admin-code-cancel');
+  const adminCodeSubmit = document.getElementById('admin-code-submit');
+  const adminClose2El = document.getElementById('admin-close-2');
+  const adminCoinsInput = document.getElementById('admin-coins-input');
+  const adminCoinsSetBtn = document.getElementById('admin-coins-set');
+  const adminCoinsAddBtn = document.getElementById('admin-coins-add');
+  const adminStageInput = document.getElementById('admin-stage-input');
+  const adminStageSetBtn = document.getElementById('admin-stage-set');
+  const adminStageNextBtn = document.getElementById('admin-stage-next');
+  const adminLuckInput = document.getElementById('admin-luck-input');
+  const adminLuckSetBtn = document.getElementById('admin-luck-set');
+  const adminLuckAddBtn = document.getElementById('admin-luck-add');
+  const adminPartyInput = document.getElementById('admin-party-input');
+  const adminPartySetBtn = document.getElementById('admin-party-set');
+  const adminPartyAddBtn = document.getElementById('admin-party-add');
+  const adminMonsterSearch = document.getElementById('admin-monster-search');
+  const adminMonsterSelect = document.getElementById('admin-monster-select');
+  const adminSelectedInfo = document.getElementById('admin-selected-info');
+  const adminSpawnMoundBtn = document.getElementById('admin-spawn-mound');
+  const adminSpawnReadyBtn = document.getElementById('admin-spawn-ready');
+  const adminSpawnWildBtn = document.getElementById('admin-spawn-wild');
+  const adminMoundIntervalInput = document.getElementById('admin-mound-interval');
+  const adminMoundApplyBtn = document.getElementById('admin-mound-apply');
+  const adminThiefIntervalInput = document.getElementById('admin-thief-interval');
+  const adminThiefApplyBtn = document.getElementById('admin-thief-apply');
+  const adminClearWorldBtn = document.getElementById('admin-clear-world');
+  const adminSaveNowBtn = document.getElementById('admin-save-now');
+  const adminDeployAllBtn = document.getElementById('admin-deploy-all');
+  const adminRecallAllBtn = document.getElementById('admin-recall-all');
+  const adminHealCoinsBtn = document.getElementById('admin-heal-coins');
+  const adminStageBoostBtn = document.getElementById('admin-stage-boost');
+  const adminLuckBoostBtn = document.getElementById('admin-luck-boost');
+
+  function refreshHud(){
+    coinValEl.textContent = formatCoinAmount(GameState.coins);
+    monsterValEl.textContent = GameState.party.length; // total captured, deployed or not
+    renderPartyStrip();
+    renderProgressPanel();
+    if(inventoryOpen) renderInventory(); // keep inventory panel in sync if it's open while things change
+    // refreshHud already runs after every capture, deploy/recall toggle,
+    // sale, stage-up, luck-up, and theft, so hooking the autosave here
+    // covers all of them in one place.
+    queueSave();
+  }
+
+  function renderProgressPanel(){
+    stageValEl.textContent = GameState.stage;
+    const sCost = stageCost(GameState.stage);
+    stageCostValEl.textContent = formatCoinAmount(sCost)+' コイン';
+    stageBtnEl.disabled = GameState.coins < sCost;
+
+    luckValEl.textContent = formatMultiplierAmount(luckMultiplier());
+    const lCost = luckUpgradeCost();
+    luckCostValEl.textContent = formatCoinAmount(lCost)+' コイン';
+    luckBtnEl.disabled = GameState.coins < lCost;
+
+    partyLimitValEl.textContent = GameState.maxParty;
+    const pCost = partyLimitUpgradeCost();
+    partyLimitCostValEl.textContent = formatCoinAmount(pCost)+' コイン';
+    partyLimitBtnEl.disabled = GameState.coins < pCost;
+  }
+
+  function tryAdvanceStage(){
+    const cost = stageCost(GameState.stage);
+    if(GameState.coins < cost){
+      showBanner('コインが足りません!', null);
+      return;
+    }
+    GameState.coins -= cost;
+    GameState.stage += 1;
+    applyStageVisuals(GameState.stage);
+    showBanner(`ステージ${GameState.stage}に進んだ!レア度アップ`, 'rare');
+    refreshHud();
+  }
+
+  function tryBuyLuck(){
+    const cost = luckUpgradeCost();
+    if(GameState.coins < cost){
+      showBanner('コインが足りません!', null);
+      return;
+    }
+    GameState.coins -= cost;
+    GameState.luckLevel += 1;
+    showBanner(`永続ラック ${formatMultiplierAmount(luckMultiplier())}!`, 'rare');
+    refreshHud();
+  }
+
+  function tryUpgradeMaxParty(){
+    const cost = partyLimitUpgradeCost();
+    if(GameState.coins < cost){
+      showBanner('コインが足りません!', null);
+      return;
+    }
+    GameState.coins -= cost;
+    GameState.maxParty += 5;
+    showBanner(`最大所持 +5! (${GameState.maxParty})`, 'good');
+    refreshHud();
+  }
+
+  stageBtnEl.addEventListener('pointerup', (e)=>{ preventDefaultIfPossible(e); tryAdvanceStage(); });
+  luckBtnEl.addEventListener('pointerup', (e)=>{ preventDefaultIfPossible(e); tryBuyLuck(); });
+  partyLimitBtnEl.addEventListener('pointerup', (e)=>{ preventDefaultIfPossible(e); tryUpgradeMaxParty(); });
+
+  function renderPartyStrip(){
+    partyStrip.innerHTML = '';
+    const dep = deployedParty();
+    dep.slice(0,18).forEach((p,i)=>{
+      const def = MONSTER_DEFS.find(d=>d.id===p.defId);
+      const el = document.createElement('div');
+      el.className = 'party-icon' + (i===0?' leader':'');
+      el.style.background = '#'+def.color.toString(16).padStart(6,'0');
+      partyStrip.appendChild(el);
+    });
+  }
+
+  function showBanner(text, kind){
+    const b = document.createElement('div');
+    b.className = 'banner' + (kind ? ' '+kind : '');
+    b.textContent = text;
+    bannerWrap.innerHTML = '';
+    bannerWrap.appendChild(b);
+    setTimeout(()=>{ if(b.parentNode) b.remove(); }, 2400);
+  }
+
+  function playCatchFx(def, chance){
+    if(chance == null) return;
+    const pct = chance * 100;
+    const tier = pct <= 0.01 ? 4 : pct <= 0.1 ? 3 : pct <= 1 ? 2 : pct <= 5 ? 1 : 0;
+    if(tier === 0) return;
+
+    const color = '#' + def.color.toString(16).padStart(6,'0');
+    const layer = captureFxLayer;
+    const fx = document.createElement('div');
+    fx.className = 'capture-fx';
+    fx.style.color = color;
+    fx.style.filter = tier >= 3 ? 'saturate(1.35) brightness(1.08)' : 'saturate(1.1)';
+    const duration = 900 + tier * 240;
+    fx.innerHTML = '<div class="flash"></div><div class="ring"></div>';
+
+    const chanceBadge = document.createElement('div');
+    chanceBadge.className = 'chance-badge';
+    chanceBadge.innerHTML = `<span class="pct">${formatChancePercent(chance)}%</span><span class="odds">${formatChanceOdds(chance)}</span>`;
+    chanceBadge.style.background = tier >= 3 ? 'linear-gradient(90deg, rgba(91,63,224,0.96), rgba(255,110,199,0.96))' : 'rgba(45, 42, 74, 0.88)';
+    chanceBadge.style.boxShadow = `0 0 18px ${color}55, 0 8px 20px rgba(0,0,0,0.18)`;
+    chanceBadge.style.border = `2px solid ${color}`;
+    if(tier >= 3){
+      chanceBadge.classList.add('center-rush');
+    }
+    fx.appendChild(chanceBadge);
+
+    const particleCount = 12 + tier * 10;
+    for(let i=0;i<particleCount;i++){
+      const p = document.createElement('span');
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 80 + Math.random() * (120 + tier * 70);
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist;
+      const scale = 0.6 + Math.random() * 1.2;
+      const useStar = i % (tier >= 3 ? 2 : 4) === 0;
+      p.className = useStar ? 'star' : 'particle';
+      p.style.setProperty('--dx', dx.toFixed(1)+'px');
+      p.style.setProperty('--dy', dy.toFixed(1)+'px');
+      p.style.setProperty('--dur', duration+'ms');
+      p.style.setProperty('--scale', scale.toFixed(2));
+      p.style.left = '50%';
+      p.style.top = '50%';
+      p.style.transform = 'translate(-50%, -50%)';
+      p.style.opacity = '1';
+      p.style.animationDelay = (Math.random()*70)+'ms';
+      p.style.background = useStar ? color : color;
+      fx.appendChild(p);
+      if(useStar) p.style.filter = 'brightness(1.15)';
+    }
+
+    if(tier >= 3){
+      const pctEl = chanceBadge.querySelector('.pct');
+      const startPct = 0.1;
+      const endPct = Math.max(0.00000001, pct);
+      const countDuration = Math.min(1700, duration + 350);
+      pctEl.textContent = `${startPct.toFixed(4)}%`;
+      const t0 = performance.now();
+      const tick = (now)=>{
+        const t = Math.min(1, (now - t0) / countDuration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const current = startPct - (startPct - endPct) * eased;
+        pctEl.textContent = `${formatChancePercentValue(current)}%`;
+        if(t < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    layer.appendChild(fx);
+    setTimeout(()=>{ if(fx.parentNode) fx.remove(); }, duration + 120);
+  }
+
+  function worldToScreen(x,y,z){
+    const v = new THREE.Vector3(x,y,z);
+    v.project(camera);
+    const rect = renderer.domElement.getBoundingClientRect();
+    return {
+      x: rect.left + (v.x*0.5+0.5)*rect.width,
+      y: rect.top + (-v.y*0.5+0.5)*rect.height
+    };
+  }
+
+  function popupCoin(worldX, worldZ, amount){
+    const s = worldToScreen(worldX, 0.9, worldZ);
+    const el = document.createElement('div');
+    el.className = 'popup';
+    el.style.left = s.x+'px';
+    el.style.top = s.y+'px';
+    el.textContent = '+'+amount;
+    popupLayer.appendChild(el);
+    setTimeout(()=>{ if(el.parentNode) el.remove(); }, 950);
+  }
+
+  function randomIslandPoint(minR, maxR){
+    const ang = Math.random()*Math.PI*2;
+    const r = minR + Math.random()*(maxR-minR);
+    return { x: Math.cos(ang)*r, z: Math.sin(ang)*r };
+  }
+
+  /* seed a few wild monsters so the island isn't empty at boot */
+  function seedStart(){
+    for(let i=0;i<3;i++){
+      const roll = pickWeightedMonsterDef();
+      const def = roll.def;
+      const pos = randomIslandPoint(1.5, GameState.islandRadius-1.0);
+      const m = { id: GameState.nextEntityId++, defId: def.id, x: pos.x, z: pos.z, spawnChance: roll.chance };
+      GameState.wildMonsters.push(m);
+      addWildMonsterMesh(m, def);
+    }
+    refreshHud();
+  }
+
+  /* =========================================================
+     PARTY TRAIL (deployed monsters follow player in a snake-like line)
+  ========================================================= */
+  const playerTrail = []; // history of {x,z} positions
+  const TRAIL_SPACING = 14; // frames of history between followers (approx)
+  const MAX_TRAIL_LEN = 40*TRAIL_SPACING + 20;
+
+  function pushTrail(){
+    playerTrail.push({x:player.x, z:player.z});
+    if(playerTrail.length > MAX_TRAIL_LEN) playerTrail.shift();
+  }
+
+  function getTrailPositionFor(index){
+    // index=0 -> right behind player, higher index -> further back
+    const back = (index+1)*TRAIL_SPACING;
+    const i = Math.max(0, playerTrail.length-1-back);
+    return playerTrail[i] || {x:player.x, z:player.z};
+  }
+
+  /* =========================================================
+     CATCH: wild monster -> party (captured, but starts UNDEPLOYED
+     — the player must open the inventory and press 出陣 to have
+     it actually follow them around the island)
+  ========================================================= */
+  function tryAutoCatch(){
+    // Walking into a wild monster catches it automatically (no separate button;
+    // holding is reserved for mounds per the requested design).
+    for(let i=GameState.wildMonsters.length-1;i>=0;i--){
+      const m = GameState.wildMonsters[i];
+      const dx = m.x-player.x, dz = m.z-player.z;
+      if(Math.sqrt(dx*dx+dz*dz) < 0.75){
+        GameState.wildMonsters.splice(i,1);
+        removeWildMonsterMesh(m.id);
+        addToParty(m.defId, { chance: m.spawnChance });
+      }
+    }
+  }
+
+  function addToParty(defId, opts={}){
+    if(GameState.party.length >= GameState.maxParty){
+      showBanner('手持ちがいっぱいです!', null);
+      return;
+    }
+    const def = MONSTER_DEFS.find(d=>d.id===defId);
+    if(!def) return;
+    const chance = typeof opts.chance === 'number' && isFinite(opts.chance) ? opts.chance : null;
+    // Newly caught monsters go into the roster undeployed; they sit in the
+    // inventory until the player presses 出陣 (deploy) for them.
+    const p = { id: GameState.nextEntityId++, defId, deployed:false, level:0 };
+    GameState.party.push(p);
+    const rarityInfo = RARITY_INFO[def.rarity];
+    const chanceText = chance === null ? '' : ` (${formatChanceLabel(chance)})`;
+    if(def.rarity==='common' || def.rarity==='uncommon'){
+      showBanner(`${def.nameJp}をゲット!${chanceText} (インベントリへ)`, 'good');
+    } else {
+      showBanner(`✨${rarityInfo.jp}✨ ${def.nameJp}をゲット!${chanceText}`, 'rare');
+    }
+    playCatchFx(def, chance);
+    playCatchSound(def, chance);
+    refreshHud();
+  }
+
+  function setDeployed(p, deployed){
+    if(p.deployed === deployed) return;
+    p.deployed = deployed;
+    const def = MONSTER_DEFS.find(d=>d.id===p.defId);
+    if(deployed){
+      addPartyMonsterMesh(p, def);
+    } else {
+      removePartyMonsterMesh(p.id);
+    }
+  }
+
+  function deployMonster(id){
+    const p = GameState.party.find(x=>x.id===id);
+    if(!p) return;
+    setDeployed(p, true);
+    refreshHud();
+  }
+  function recallMonster(id){
+    const p = GameState.party.find(x=>x.id===id);
+    if(!p) return;
+    setDeployed(p, false);
+    refreshHud();
+  }
+  function deployAll(){
+    GameState.party.forEach(p=>setDeployed(p, true));
+    showBanner('全員出陣!', 'good');
+    refreshHud();
+  }
+  function recallAll(){
+    GameState.party.forEach(p=>setDeployed(p, false));
+    showBanner('全員待機中', null);
+    refreshHud();
+  }
+
+  /* =========================================================
+     SELL — convert a captured monster into coins. Selling
+     removes it from the roster entirely (and from the world if
+     it was deployed). Sell price is the monster's coinValue,
+     rounded up to the nearest whole coin so even the cheapest
+     common is worth at least 1.
+  ========================================================= */
+  function sellMonster(id){
+    const idx = GameState.party.findIndex(p=>p.id===id);
+    if(idx<0) return;
+    const p = GameState.party[idx];
+    const def = MONSTER_DEFS.find(d=>d.id===p.defId);
+    if(!def) return;
+    const price = Math.max(1, Math.ceil(def.coinValue));
+    if(p.deployed) removePartyMonsterMesh(p.id);
+    GameState.party.splice(idx,1);
+    GameState.coins += price;
+    showBanner(`${def.nameJp}を売却 (+${price})`, null);
+    refreshHud();
+  }
+
+  function upgradeMonster(id){
+    const p = GameState.party.find(x=>x.id===id);
+    if(!p) return;
+    const def = MONSTER_DEFS.find(d=>d.id===p.defId);
+    if(!def) return;
+    const cost = monsterUpgradeCost(p);
+    if(GameState.coins < cost){
+      showBanner('コインが足りません!', null);
+      return;
+    }
+    GameState.coins -= cost;
+    p.level = (p.level || 0) + 1;
+    showBanner(`${def.nameJp}を強化! 収入アップ`, 'good');
+    refreshHud();
+  }
+
+  function sellAllBelowRarity(){
+    // not currently exposed via a button, but kept as a small helper in case
+    // a "sell all commons" style action is wanted later — sells every common.
+    const toSell = GameState.party.filter(p=>{
+      const def = MONSTER_DEFS.find(d=>d.id===p.defId);
+      return def && def.rarity==='common';
+    }).map(p=>p.id);
+    toSell.forEach(sellMonster);
+  }
+
+  /* =========================================================
+     INVENTORY PANEL
+  ========================================================= */
+  let inventoryOpen = false;
+  const inventoryBtn = document.getElementById('inventory-btn');
+  const inventoryOverlay = document.getElementById('inventory-overlay');
+  const inventoryClose = document.getElementById('inventory-close');
+  const inventoryGrid = document.getElementById('inventory-grid');
+  const deployAllBtn = document.getElementById('deploy-all-btn');
+  const recallAllBtn = document.getElementById('recall-all-btn');
+  const monsterCountPill = document.getElementById('monster-count-pill');
+
+  function openInventory(){
+    inventoryOpen = true;
+    inventoryOverlay.style.display = 'flex';
+    renderInventory();
+  }
+  function closeInventory(){
+    inventoryOpen = false;
+    inventoryOverlay.style.display = 'none';
+  }
+
+  function renderInventory(){
+    inventoryGrid.innerHTML = '';
+    if(GameState.party.length === 0){
+      const empty = document.createElement('div');
+      empty.id = 'inventory-empty';
+      empty.textContent = 'まだモンスターを持っていません。土を掘って見つけよう!';
+      inventoryGrid.appendChild(empty);
+      return;
+    }
+    // show newest catches first so the player immediately sees what they just got
+    const sorted = GameState.party.slice().sort((a,b)=>b.id-a.id);
+    sorted.forEach(p=>{
+      const def = MONSTER_DEFS.find(d=>d.id===p.defId);
+      if(!def) return;
+      const rr = RARITY_INFO[def.rarity];
+      const sellPrice = Math.max(1, Math.ceil(def.coinValue * rarityRewardMultiplier(def)));
+      const level = p.level || 0;
+      const upCost = monsterUpgradeCost(p);
+      const card = document.createElement('div');
+      card.className = 'inv-card' + (p.deployed ? ' deployed' : '');
+      card.innerHTML = `
+        <div class="orb" style="background:#${def.color.toString(16).padStart(6,'0')}"></div>
+        <div class="nm">${def.nameJp}</div>
+        <div class="rr" style="color:${rr.col}">${rr.jp}</div>
+        <div class="lvl">Lv.${level}</div>
+        <div class="coinval">💰${formatCoinAmount(sellPrice)}</div>
+        <div class="income">収入/秒 ${formatCoinAmount(incomePerMonster(def, level))}</div>
+        <div class="upgrade-cost">強化費 ${formatCoinAmount(upCost)}</div>
+        ${p.deployed ? '<div class="deployed-tag">出陣中</div>' : ''}
+        <button class="upgrade-btn" data-upgrade-id="${p.id}">強化</button>
+        <button class="sell-btn" data-sell-id="${p.id}">売る</button>
+      `;
+      // clicking the card body (not the buttons) toggles deploy/recall
+      card.addEventListener('click', (e)=>{
+        if(e.target.closest('.sell-btn') || e.target.closest('.upgrade-btn')) return;
+        if(p.deployed) recallMonster(p.id);
+        else deployMonster(p.id);
+      });
+      const upgradeBtn = card.querySelector('.upgrade-btn');
+      upgradeBtn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        upgradeMonster(p.id);
+      });
+      const sellBtn = card.querySelector('.sell-btn');
+      sellBtn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        sellMonster(p.id);
+      });
+      inventoryGrid.appendChild(card);
+    });
+  }
+
+  inventoryBtn.addEventListener('click', openInventory);
+  monsterCountPill.addEventListener('click', openInventory);
+  inventoryClose.addEventListener('click', closeInventory);
+  inventoryOverlay.addEventListener('click', (e)=>{
+    if(e.target === inventoryOverlay) closeInventory(); // tap outside the sheet to dismiss
+  });
+  deployAllBtn.addEventListener('click', deployAll);
+  recallAllBtn.addEventListener('click', recallAll);
+
+  /* =========================================================
+     MOUND LIFECYCLE
+  ========================================================= */
+  function updateMounds(now, dt){
+    for(let i=GameState.mounds.length-1;i>=0;i--){
+      const mo = GameState.mounds[i];
+      const mesh = moundMeshMap.get(mo.id);
+      if(mo.state==='growing'){
+        const t = Math.min(1, (now-mo.growStart)/mo.growDuration);
+        if(mesh){
+          const s = 0.01 + t*0.99;
+          mesh.userData.moundMesh.scale.set(1, s, 1);
+          mesh.userData.moundMesh.position.y = 0.02 + s*0.22;
+        }
+        if(t>=1) mo.state = 'ready';
+      }
+      if(mesh){
+        mesh.rotation.y += dt*0.35;
+        const glow = 0.11 + Math.sin(now*0.002 + mesh.userData.hueShift)*0.05;
+        mesh.userData.moundMesh.material.emissiveIntensity = Math.max(0, glow);
+      }
+    }
+
+    nearbyReadyMound = null;
+    let bestDist = 2.4;
+    for(const mo of GameState.mounds){
+      if(mo.state!=='ready') continue;
+      const dx=mo.x-player.x, dz=mo.z-player.z;
+      const d = Math.sqrt(dx*dx+dz*dz);
+      if(d < bestDist){
+        bestDist = d;
+        nearbyReadyMound = mo;
+      }
+    }
+
+    if(nearbyReadyMound){
+      moundPrompt.style.display = 'flex';
+      moundNeedle.style.display = 'block';
+      moundActionBtn.style.display = 'block';
+      moundActionBtn.disabled = false;
+      const phase = timingPhase(now, nearbyReadyMound);
+      moundNeedle.style.left = (phase*100)+'%';
+      const inWindow = phase >= TIMING_WINDOW.start && phase <= TIMING_WINDOW.end;
+      moundActionBtn.textContent = inWindow ? '今だ！押して掘る' : 'タイミングよく押す';
+      moundLabel.textContent = inWindow ? '今だ! ボタンを押して!' : 'タイミングを合わせてボタンを押そう';
+      moundRingFg.style.strokeDashoffset = String(RING_CIRCUMFERENCE*(1-phase));
+      moundRingFg.style.stroke = inWindow ? 'var(--green)' : 'var(--purple)';
+    } else {
+      moundPrompt.style.display = 'none';
+      moundRingFg.style.strokeDashoffset = RING_CIRCUMFERENCE;
+      moundActionBtn.style.display = 'none';
+    }
+  }
+
+  function finishDig(mo){
+    const idx = GameState.mounds.findIndex(x=>x.id===mo.id);
+    if(idx>=0) GameState.mounds.splice(idx,1);
+    removeMoundMesh(mo.id);
+    nearbyReadyMound = null;
+    moundPrompt.style.display = 'none';
+    addToParty(mo.spawnDef.id, { chance: mo.spawnChance });
+  }
+
+  function trySpawnMound(now){
+    if(now - GameState.lastMoundAt < moundSpawnIntervalMs()) return;
+    GameState.lastMoundAt = now;
+    spawnMound();
+  }
+
+  /* =========================================================
+     PASSIVE INCOME — coins accrue every second automatically,
+     scaling with stage. Uses a running "last tick" timestamp so
+     it works correctly regardless of frame rate (accumulates a
+     fractional amount each frame rather than a fixed +N/sec tick).
+  ========================================================= */
+  function updateIncome(now){
+    if(GameState.lastIncomeAt === 0){ GameState.lastIncomeAt = now; return; }
+    const elapsedSec = (now - GameState.lastIncomeAt)/1000;
+    if(elapsedSec <= 0) return;
+    GameState.coins += incomePerSecond()*elapsedSec;
+    GameState.lastIncomeAt = now;
+  }
+
+  /* =========================================================
+     THIEF AI + BATTLE
+     Thief now only shows up if the player has a DEPLOYED monster
+     to fight with — an undeployed roster sitting in the inventory
+     can't be stolen from, since it's not "with" the player.
+  ========================================================= */
+  let lastThiefAt = performance.now(); // grace period set after boot below
+
+  function trySpawnThief(now){
+    if(GameState.thief) return;
+    if(deployedParty().length === 0) return; // nothing deployed to steal / fight with
+    if(now - lastThiefAt < GameState.thiefInterval) return;
+    lastThiefAt = now;
+
+    const entryAngle = Math.random()*Math.PI*2;
+    const entryR = GameState.islandRadius + 3;
+    GameState.thief = {
+      x: Math.cos(entryAngle)*entryR,
+      z: Math.sin(entryAngle)*entryR,
+      state:'approach',
+      speed:2.1,
+    };
+    thiefMesh.visible = true;
+    thiefMesh.position.set(GameState.thief.x,0,GameState.thief.z);
+    showBanner('⚠️ 泥棒が近づいてくる!', null);
+  }
+
+  function updateThief(dt, now){
+    const t = GameState.thief;
+    if(!t) return;
+
+    if(t.state==='approach'){
+      const dx = player.x-t.x, dz = player.z-t.z;
+      const dist = Math.sqrt(dx*dx+dz*dz);
+      if(dist>0.05){
+        const nx=dx/dist, nz=dz/dist;
+        t.x += nx*t.speed*dt;
+        t.z += nz*t.speed*dt;
+        thiefMesh.rotation.y = Math.atan2(nx,nz);
+      }
+      if(dist < 1.1 && !GameState.battleActive){
+        startBattle();
+      }
+    } else if(t.state==='fleeing'){
+      const dx = t.x, dz = t.z;
+      const dist = Math.sqrt(dx*dx+dz*dz) || 1;
+      const nx=dx/dist, nz=dz/dist;
+      t.x += nx*2.6*dt;
+      t.z += nz*2.6*dt;
+      thiefMesh.rotation.y = Math.atan2(nx,nz);
+      if(dist > GameState.islandRadius+4){
+        resetThief();
+      }
+    }
+    thiefMesh.position.x = t.x;
+    thiefMesh.position.z = t.z;
+  }
+
+  function resetThief(){
+    GameState.thief = null;
+    thiefMesh.visible = false;
+  }
+
+  /* ---------- Battle overlay logic ---------- */
+  const battleOverlay = document.getElementById('battle-overlay');
+  const battleMonA = document.getElementById('battle-mon-a');
+  const battleMonB = document.getElementById('battle-mon-b');
+  const battleLog = document.getElementById('battle-log');
+  const battleResult = document.getElementById('battle-result');
+
+  function fillBattleCard(el, def, label){
+    el.querySelector('.swatch').style.background = '#'+def.color.toString(16).padStart(6,'0');
+    el.querySelector('.nm').textContent = label ? `${label}: ${def.nameJp}` : def.nameJp;
+    const rr = RARITY_INFO[def.rarity];
+    el.querySelector('.rr').textContent = rr.jp;
+    el.querySelector('.rr').style.color = rr.col;
+  }
+
+  function startBattle(){
+    const dep = deployedParty();
+    if(dep.length===0) return; // safety: shouldn't happen since trySpawnThief already checks this
+    GameState.battleActive = true;
+    GameState.thief.state = 'battling';
+
+    const leader = dep[0]; // the monster leading the deployed party fights on your behalf
+    const leaderDef = MONSTER_DEFS.find(d=>d.id===leader.defId);
+    const enemyRoll = pickWeightedMonsterDef();
+    const enemyDef = enemyRoll.def;
+
+    fillBattleCard(battleMonA, leaderDef, 'あなた');
+    fillBattleCard(battleMonB, enemyDef, '泥棒');
+    battleLog.textContent = '戦闘準備中…';
+    battleResult.textContent = '';
+    battleOverlay.style.display = 'flex';
+
+    setTimeout(()=>{
+      battleLog.textContent = `${leaderDef.nameJp} vs ${enemyDef.nameJp}!`;
+    }, 250);
+
+    setTimeout(()=>{
+      resolveBattle(leader, leaderDef, enemyDef);
+    }, 1600);
+  }
+
+  function resolveBattle(leader, leaderDef, enemyDef){
+    // Score = power+guard, plus a luck-weighted random roll for excitement
+    const scoreA = leaderDef.power + leaderDef.guard + Math.random()*leaderDef.luck*2;
+    const scoreB = enemyDef.power + enemyDef.guard + Math.random()*enemyDef.luck*2;
+    const playerWins = scoreA >= scoreB;
+
+    if(playerWins){
+      battleLog.textContent = `${leaderDef.nameJp}の勝利!`;
+      battleResult.textContent = '🎉 泥棒を追い払った!';
+      battleResult.style.color = 'var(--green)';
+      showBanner('バトルに勝利!モンスターを守った', 'good');
+      GameState.thief.state = 'fleeing';
+    } else {
+      battleLog.textContent = `${leaderDef.nameJp}は敗れてしまった…`;
+      battleResult.textContent = `😢 ${leaderDef.nameJp}が奪われた…`;
+      battleResult.style.color = 'var(--warn)';
+      showBanner(`${leaderDef.nameJp}が盗まれた!`, null);
+      // remove leader entirely from the roster (deployed mesh + party array)
+      const idx = GameState.party.findIndex(p=>p.id===leader.id);
+      if(idx>=0){
+        removePartyMonsterMesh(leader.id);
+        GameState.party.splice(idx,1);
+      }
+      GameState.thief.state = 'fleeing';
+      refreshHud();
+    }
+
+    setTimeout(()=>{
+      battleOverlay.style.display = 'none';
+      GameState.battleActive = false;
+    }, 1500);
+  }
+
+  /* =========================================================
+     RESTORE — rebuild meshes for any previously-deployed
+     monsters after loadGame() populates GameState.party. This
+     runs once at boot; undeployed monsters need no mesh, since
+     they're just sitting in the inventory.
+  ========================================================= */
+  function restoreDeployedMeshes(){
+    GameState.party.forEach(p=>{
+      if(!p.deployed) return;
+      const def = MONSTER_DEFS.find(d=>d.id===p.defId);
+      if(!def) return;
+      addPartyMonsterMesh(p, def);
+    });
+  }
+
+  /* =========================================================
+     MAIN LOOP
+  ========================================================= */
+  let lastTime = performance.now();
+  const hadSave = loadGame();       // restore coins + inventory + stage + luck before anything else spawns
+  if(hadSave) restoreDeployedMeshes();
+  seedStart();                      // wild monsters on the island are always freshly seeded, save or no save
+  if(hadSave) showBanner('前回のデータを読み込みました', 'good');
+  lastThiefAt = lastTime - GameState.thiefInterval + 20000; // first thief ~20s after boot regardless of interval length
+  GameState.lastMoundAt = lastTime - GameState.moundInterval + 6000; // first mound ~6s after boot
+  GameState.lastIncomeAt = lastTime; // passive income starts accruing from boot
+
+  function animate(now){
+    requestAnimationFrame(animate);
+    const dt = Math.min((now-lastTime)/1000, 0.05);
+    lastTime = now;
+
+    updateIncome(now);
+
+    // movement from joystick, relative to camera yaw (forward = where you're looking, flattened)
+    let isMoving = false;
+    if(Math.abs(joyVec.x)>0.02 || Math.abs(joyVec.y)>0.02){
+      isMoving = true;
+      const forward = { x:Math.sin(player.yaw), z:Math.cos(player.yaw) };
+      const right   = { x:Math.cos(player.yaw), z:-Math.sin(player.yaw) };
+      // Left/right (strafe) sign: flipped back per user feedback that the
+      // previous version still felt reversed. Forward/back (joyVec.y) is
+      // untouched by this and keeps its existing sign.
+      const moveX = -right.x*joyVec.x - forward.x*joyVec.y;
+      const moveZ = -right.z*joyVec.x - forward.z*joyVec.y;
+      const mLen = Math.sqrt(moveX*moveX+moveZ*moveZ) || 1;
+      const nx = moveX/mLen, nz = moveZ/mLen;
+      const mag = Math.min(1, Math.sqrt(joyVec.x*joyVec.x+joyVec.y*joyVec.y));
+      const step = player.moveSpeed*mag*dt;
+      const nextX = player.x + nx*step;
+      const nextZ = player.z + nz*step;
+      const clamped = clampToIsland(nextX, nextZ, 0.3);
+      player.x = clamped.x;
+      player.z = clamped.z;
+      pushTrail();
+    }
+
+    // subtle FPS head-bob while walking: reinforces the eye-level, on-foot
+    // feel now that the camera sits at human height instead of hovering above.
+    if(isMoving){
+      player.bobPhase += dt*9.2;
+      player.bobAmount += (0.045 - player.bobAmount)*Math.min(1, dt*6);
+    } else {
+      player.bobAmount += (0 - player.bobAmount)*Math.min(1, dt*6);
+    }
+    player.height = player.baseHeight + Math.sin(player.bobPhase)*player.bobAmount;
+
+    updateCamera();
+
+    tryAutoCatch();
+
+    // wild monster bob
+    for(const m of GameState.wildMonsters){
+      const rec = wildMeshMap.get(m.id);
+      if(rec){
+        rec.bobPhase += dt*2.2;
+        rec.group.position.y = Math.sin(rec.bobPhase)*0.06;
+        if(rec.group.userData.sparkRing) rec.group.userData.sparkRing.rotation.z += dt*0.6;
+      }
+    }
+
+    // deployed party monsters follow along the trail (undeployed ones have
+    // no mesh at all, so this loop naturally only touches ones you sent out)
+    const dep = deployedParty();
+    dep.forEach((p,i)=>{
+      const rec = partyMeshMap.get(p.id);
+      if(!rec) return;
+      const pos = getTrailPositionFor(i);
+      rec.group.position.x += (pos.x - rec.group.position.x)*Math.min(1, dt*6);
+      rec.group.position.z += (pos.z - rec.group.position.z)*Math.min(1, dt*6);
+      rec.bobPhase += dt*2.4;
+      rec.group.position.y = Math.sin(rec.bobPhase+i)*0.05;
+      if(rec.group.userData.sparkRing) rec.group.userData.sparkRing.rotation.z += dt*0.6;
+    });
+
+    trySpawnMound(now);
+    updateMounds(now, dt);
+
+    if(!GameState.battleActive){
+      trySpawnThief(now);
+      updateThief(dt, now);
+    }
+
+    // HUD coin display + progress panel affordability need to refresh every
+    // frame now that coins tick up continuously, not just on discrete events.
+    coinValEl.textContent = formatCoinAmount(GameState.coins);
+    stageBtnEl.disabled = GameState.coins < stageCost(GameState.stage);
+    luckBtnEl.disabled = GameState.coins < luckUpgradeCost();
+
+    renderer.render(scene, camera);
+  }
+
+  /* =========================================================
+     RESIZE
+  ========================================================= */
+
+  function normalizeAdminMonsterChoice(){
+    const q = (adminMonsterSearch.value || '').trim().toLowerCase();
+    const current = Number(adminMonsterSelect.value || 0);
+    const defs = MONSTER_DEFS.filter(def=>{
+      if(!q) return true;
+      const rr = RARITY_INFO[def.rarity]?.jp || def.rarity;
+      return def.nameJp.toLowerCase().includes(q)
+        || def.name.toLowerCase().includes(q)
+        || def.key.toLowerCase().includes(q)
+        || String(def.id).includes(q)
+        || rr.toLowerCase().includes(q);
+    });
+    adminMonsterSelect.innerHTML = '';
+    defs.forEach(def=>{
+      const opt = document.createElement('option');
+      opt.value = String(def.id);
+      opt.textContent = `${def.id}. ${def.nameJp} / ${def.name} / ${RARITY_INFO[def.rarity].jp}`;
+      adminMonsterSelect.appendChild(opt);
+    });
+    const chosen = defs.find(def=>def.id === current) || defs[0];
+    if(chosen) adminMonsterSelect.value = String(chosen.id);
+    updateAdminSelectedInfo();
+  }
+
+  function getAdminSelectedDef(){
+    const id = Number(adminMonsterSelect.value);
+    return MONSTER_DEFS.find(def=>def.id===id) || null;
+  }
+
+  function updateAdminSelectedInfo(){
+    const def = getAdminSelectedDef();
+    if(!def){
+      adminSelectedInfo.textContent = '未選択';
+      return;
+    }
+    const rr = RARITY_INFO[def.rarity];
+    adminSelectedInfo.textContent = `${def.id}. ${def.nameJp} (${def.name}) / ${rr.jp} / coinValue ${def.coinValue}`;
+  }
+
+  function openAdminPanel(){
+    adminOverlay.style.display = 'flex';
+    adminCoinsInput.value = Math.floor(GameState.coins);
+    adminStageInput.value = GameState.stage;
+    adminLuckInput.value = GameState.luckLevel;
+    adminPartyInput.value = GameState.maxParty;
+    adminMoundIntervalInput.value = GameState.moundInterval;
+    adminThiefIntervalInput.value = GameState.thiefInterval;
+    normalizeAdminMonsterChoice();
+  }
+
+  function closeAdminPanel(){
+    adminOverlay.style.display = 'none';
+  }
+
+  function openAdminCodePrompt(){
+    adminCodeOverlay.style.display = 'flex';
+    adminCodeInput.value = '';
+    setTimeout(()=>adminCodeInput.focus(), 0);
+  }
+
+  function closeAdminCodePrompt(){
+    adminCodeOverlay.style.display = 'none';
+  }
+
+  function submitAdminCode(){
+    if(String(adminCodeInput.value || '').trim() === '49763145'){
+      closeAdminCodePrompt();
+      openAdminPanel();
+      adminCodeBuffer = '';
+    } else {
+      showBanner('管理者コードが違います', null);
+      adminCodeInput.select();
+    }
+  }
+
+  function setCoins(value){
+    const n = Number(value);
+    if(!Number.isFinite(n)) return;
+    GameState.coins = Math.max(0, Math.floor(n));
+    showBanner(`コインを ${formatCoinAmount(GameState.coins)} に設定`, 'good');
+    refreshHud();
+  }
+
+  function setStage(value){
+    const n = Math.max(1, Math.floor(Number(value) || 1));
+    GameState.stage = n;
+    applyStageVisuals(GameState.stage);
+    showBanner(`ステージを ${n} に設定`, 'rare');
+    refreshHud();
+  }
+
+  function setLuck(value){
+    const n = Math.max(0, Math.floor(Number(value) || 0));
+    GameState.luckLevel = n;
+    showBanner(`ラックLvを ${n} に設定`, 'rare');
+    refreshHud();
+  }
+
+  function setMaxParty(value){
+    const n = Math.max(GameState.party.length, Math.floor(Number(value) || 1));
+    GameState.maxParty = n;
+    showBanner(`最大所持を ${n} に設定`, 'good');
+    refreshHud();
+  }
+
+  function spawnAdminMonster(mode){
+    const def = getAdminSelectedDef();
+    if(!def){
+      showBanner('キャラを選んでください', null);
+      return;
+    }
+    if(mode === 'party'){
+      addToParty(def.id, { chance: null });
+      return;
+    }
+    if(mode === 'wild'){
+      const pos = randomIslandPoint(1.5, GameState.islandRadius - 1.0);
+      const m = {
+        id: GameState.nextEntityId++,
+        defId: def.id,
+        x: pos.x,
+        z: pos.z,
+        spawnChance: null,
+      };
+      GameState.wildMonsters.push(m);
+      addWildMonsterMesh(m, def);
+      showBanner(`${def.nameJp}を野生出現`, 'good');
+      refreshHud();
+      return;
+    }
+    spawnMound({
+      forcedDefId: def.id,
+      readyNow: mode === 'ready',
+      atPlayer: true,
+    });
+    showBanner(`${def.nameJp}の土を生成`, 'rare');
+    refreshHud();
+  }
+
+  function clearWorldMonsters(){
+    for(const rec of [...GameState.wildMonsters]){
+      removeWildMonsterMesh(rec.id);
+    }
+    GameState.wildMonsters = [];
+    for(const mo of [...GameState.mounds]){
+      removeMoundMesh(mo.id);
+    }
+    GameState.mounds = [];
+    nearbyReadyMound = null;
+    moundPrompt.style.display = 'none';
+    showBanner('地上モブと土を全消し', 'warn');
+    refreshHud();
+  }
+
+  function applyAdminNumbers(){
+    if(adminCoinsInput.value !== '') setCoins(adminCoinsInput.value);
+    if(adminStageInput.value !== '') setStage(adminStageInput.value);
+    if(adminLuckInput.value !== '') setLuck(adminLuckInput.value);
+    if(adminPartyInput.value !== '') setMaxParty(adminPartyInput.value);
+    if(adminMoundIntervalInput.value !== ''){
+      const n = Math.max(1000, Math.floor(Number(adminMoundIntervalInput.value) || GameState.moundInterval));
+      GameState.moundInterval = n;
+      showBanner(`土の間隔 ${n}ms`, 'good');
+    }
+    if(adminThiefIntervalInput.value !== ''){
+      const n = Math.max(1000, Math.floor(Number(adminThiefIntervalInput.value) || GameState.thiefInterval));
+      GameState.thiefInterval = n;
+      showBanner(`盗人の間隔 ${n}ms`, 'good');
+    }
+    refreshHud();
+  }
+
+  let adminCodeBuffer = '';
+  document.addEventListener('keydown', (e)=>{
+    const tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
+    if(['input','textarea','select'].includes(tag) || document.activeElement?.isContentEditable) return;
+    if(e.key && /^[0-9]$/.test(e.key)){
+      adminCodeBuffer = (adminCodeBuffer + e.key).slice(-8);
+      if(adminCodeBuffer === '49763145'){
+        openAdminPanel();
+        adminCodeBuffer = '';
+      }
+    } else {
+      adminCodeBuffer = '';
+    }
+  });
+
+  adminMonsterSearch.addEventListener('input', normalizeAdminMonsterChoice);
+  adminMonsterSelect.addEventListener('change', updateAdminSelectedInfo);
+  adminCloseEl.addEventListener('click', closeAdminPanel);
+  adminClose2El.addEventListener('click', closeAdminPanel);
+  adminOpenBtn.addEventListener('click', openAdminCodePrompt);
+  adminCodeCancel.addEventListener('click', closeAdminCodePrompt);
+  adminCodeSubmit.addEventListener('click', submitAdminCode);
+  adminCodeInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') submitAdminCode(); });
+  adminCodeOverlay.addEventListener('click', (e)=>{ if(e.target === adminCodeOverlay) closeAdminCodePrompt(); });
+  adminOverlay.addEventListener('click', (e)=>{ if(e.target === adminOverlay) closeAdminPanel(); });
+
+  adminCoinsSetBtn.addEventListener('click', ()=>{ setCoins(adminCoinsInput.value); });
+  adminCoinsAddBtn.addEventListener('click', ()=>{ setCoins((GameState.coins || 0) + 1000); });
+  adminStageSetBtn.addEventListener('click', ()=>{ setStage(adminStageInput.value); });
+  adminStageNextBtn.addEventListener('click', ()=>{ setStage(GameState.stage + 1); });
+  adminLuckSetBtn.addEventListener('click', ()=>{ setLuck(adminLuckInput.value); });
+  adminLuckAddBtn.addEventListener('click', ()=>{ setLuck(GameState.luckLevel + 1); });
+  adminPartySetBtn.addEventListener('click', ()=>{ setMaxParty(adminPartyInput.value); });
+  adminPartyAddBtn.addEventListener('click', ()=>{ setMaxParty(GameState.maxParty + 5); });
+  adminSpawnMoundBtn.addEventListener('click', ()=>spawnAdminMonster('mound'));
+  adminSpawnReadyBtn.addEventListener('click', ()=>spawnAdminMonster('ready'));
+  adminSpawnWildBtn.addEventListener('click', ()=>spawnAdminMonster('wild'));
+  adminMoundApplyBtn.addEventListener('click', ()=>{ applyAdminNumbers(); });
+  adminThiefApplyBtn.addEventListener('click', ()=>{ applyAdminNumbers(); });
+  adminClearWorldBtn.addEventListener('click', ()=>{ clearWorldMonsters(); });
+  adminSaveNowBtn.addEventListener('click', ()=>{ saveGame(); showBanner('即保存しました', 'good'); });
+  adminDeployAllBtn.addEventListener('click', ()=>{ deployAll(); refreshHud(); });
+  adminRecallAllBtn.addEventListener('click', ()=>{ recallAll(); refreshHud(); });
+  adminHealCoinsBtn.addEventListener('click', ()=>{ setCoins(999999); });
+  adminStageBoostBtn.addEventListener('click', ()=>{ setStage(GameState.stage + 10); });
+  adminLuckBoostBtn.addEventListener('click', ()=>{ setLuck(GameState.luckLevel + 10); });
+
+  function onResize(){
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+  window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', ()=>setTimeout(onResize,200));
+
+  /* =========================================================
+     BOOT
+  ========================================================= */
+  let loadingHidden = false;
+  function hideLoading(){
+    if(loadingHidden) return;
+    loadingHidden = true;
+    const l = document.getElementById('loading');
+    if(!l) return;
+    l.style.opacity = '0';
+    setTimeout(()=>l.remove(), 550);
+  }
+
+  applyStageVisuals(GameState.stage);
+  refreshHud();
+  requestAnimationFrame((now)=>{
+    animate(now);
+    hideLoading();
+  });
+  setTimeout(hideLoading, 2500);
+
+})();
+</script>
+
+</body>
+</html>
