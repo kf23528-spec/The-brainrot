@@ -68,6 +68,34 @@
     pointer-events:none;
     white-space:nowrap;
   }
+  #event-badge{
+    position:fixed; top: calc(max(14px, env(safe-area-inset-top)) + 34px); left:50%; transform:translateX(-50%);
+    min-width: min(92vw, 360px);
+    background:linear-gradient(90deg, rgba(45,42,74,0.92), rgba(124,92,252,0.92));
+    color:white; font-weight:900; letter-spacing:0.3px;
+    padding:8px 14px; border-radius:999px;
+    font-size:12px;
+    box-shadow:0 4px 0 rgba(45,42,74,0.22), 0 10px 22px rgba(124,92,252,0.22);
+    z-index:9;
+    pointer-events:none;
+    white-space:nowrap;
+    text-align:center;
+    backdrop-filter:blur(4px);
+  }
+  #event-badge .icon{ margin-right:6px; }
+  #event-badge.active{ background:linear-gradient(90deg, rgba(255,106,61,0.96), rgba(124,92,252,0.96)); }
+  #event-badge.idle{ background:linear-gradient(90deg, rgba(45,42,74,0.82), rgba(91,87,121,0.82)); }
+  #event-badge .sub{ display:block; margin-top:3px; font-size:10px; font-weight:800; opacity:0.9; }
+
+  #event-visual-overlay{
+    position:fixed; inset:0;
+    z-index:6;
+    pointer-events:none;
+    opacity:0;
+    transition:opacity 0.35s ease, background 0.35s ease;
+    mix-blend-mode:screen;
+    filter:saturate(1.2) contrast(1.05);
+  }
 
   /* ---------- Banner ---------- */
   #banner-wrap{
@@ -393,6 +421,20 @@
     font-size:8.1px; font-weight:700; color:#5B5779; line-height:1.1;
     text-align:center;
   }
+  .inv-card .attr-chip{
+    font-size:8.2px; font-weight:900; line-height:1.1;
+    text-align:center;
+    padding:3px 6px;
+    border-radius:999px;
+    color:white;
+    background:linear-gradient(90deg, #7C5CFC, #FF6EC7);
+    box-shadow:0 1px 0 rgba(0,0,0,0.12);
+    max-width:100%;
+  }
+  .inv-card .attr-chip.none{
+    background:rgba(45,42,74,0.10);
+    color:var(--ink-soft);
+  }
   .inv-card .lvl,
   .inv-card .upgrade-cost{
     font-size:8px; font-weight:800; line-height:1.1; text-align:center;
@@ -711,6 +753,8 @@
 <div id="crosshair"></div>
 
 <div id="title-badge">🏝️ PICK UP MONSTER</div>
+<div id="event-badge" class="idle">イベント準備中…</div>
+<div id="event-visual-overlay"></div>
 <button id="admin-open-btn" aria-label="管理者コード" title="管理者コード">⚙</button>
 
 <div id="admin-code-overlay">
@@ -1318,7 +1362,256 @@
 
     // --- Permanent Luck ---
     luckLevel: 0,             // how many times the player has purchased a luck upgrade
+
+    // --- World Event ---
+    eventState: null,
+    eventNextAt: 0,
+    eventEndsAt: 0,
+
   };
+
+  const EVENT_CYCLE_MS = 5 * 60 * 1000;
+  const EVENT_DURATION_MS = 60 * 1000;
+  const EVENT_TYPES = [
+    { key:'flame',  jp:'炎嵐',   icon:'🔥', color:0xFF6A3D, weight:14, auraOpacity:0.34, auraScale:1.60, minBoost:0.55, maxBoost:2.70, curve:1.45, bodyShift:0.28, glowBoost:0.34, particle:'spark' },
+    { key:'frost',  jp:'氷晶',   icon:'❄️', color:0x72D7FF, weight:11, auraOpacity:0.30, auraScale:1.56, minBoost:0.58, maxBoost:2.45, curve:1.48, bodyShift:0.24, glowBoost:0.30, particle:'snow' },
+    { key:'storm',  jp:'雷鳴',   icon:'⚡', color:0xFFE35A, weight:10, auraOpacity:0.29, auraScale:1.50, minBoost:0.57, maxBoost:2.60, curve:1.42, bodyShift:0.26, glowBoost:0.32, particle:'bolt' },
+    { key:'nature', jp:'森羅',   icon:'🌿', color:0x67E08A, weight:12, auraOpacity:0.31, auraScale:1.54, minBoost:0.60, maxBoost:2.35, curve:1.50, bodyShift:0.22, glowBoost:0.27, particle:'leaf' },
+    { key:'abyss',  jp:'深淵',   icon:'🌑', color:0x6B5BFF, weight:7, auraOpacity:0.36, auraScale:1.66, minBoost:0.48, maxBoost:3.15, curve:1.35, bodyShift:0.32, glowBoost:0.40, particle:'void' },
+    { key:'light',  jp:'聖光',   icon:'✨', color:0xFFF2A0, weight:9, auraOpacity:0.28, auraScale:1.48, minBoost:0.64, maxBoost:2.20, curve:1.55, bodyShift:0.20, glowBoost:0.26, particle:'star' },
+    { key:'crystal',jp:'結晶',   icon:'💎', color:0x9EF7FF, weight:11, auraOpacity:0.30, auraScale:1.57, minBoost:0.59, maxBoost:2.55, curve:1.43, bodyShift:0.24, glowBoost:0.31, particle:'shard' },
+    { key:'poison', jp:'毒霧',   icon:'☠️', color:0xB6FF6A, weight:8, auraOpacity:0.29, auraScale:1.52, minBoost:0.58, maxBoost:2.30, curve:1.53, bodyShift:0.21, glowBoost:0.28, particle:'mist' },
+    { key:'cosmic', jp:'星屑',   icon:'🌌', color:0xC88BFF, weight:9, auraOpacity:0.37, auraScale:1.68, minBoost:0.50, maxBoost:3.20, curve:1.34, bodyShift:0.34, glowBoost:0.41, particle:'cosmic' },
+    { key:'void',   jp:'虚無',   icon:'🕳️', color:0xFFFFFF, weight:4, auraOpacity:0.22, auraScale:1.72, minBoost:0.42, maxBoost:3.60, curve:1.28, bodyShift:0.38, glowBoost:0.45, particle:'void' },
+  ];
+  const EVENT_TYPE_MAP = Object.fromEntries(EVENT_TYPES.map(evt => [evt.key, evt]));
+
+  function getEventByKey(key){
+    return EVENT_TYPE_MAP[key] || null;
+  }
+
+  function pickEventType(){
+    const total = EVENT_TYPES.reduce((sum, evt)=>sum + (evt.weight || 1), 0);
+    let r = Math.random() * total;
+    for(const evt of EVENT_TYPES){
+      r -= (evt.weight || 1);
+      if(r <= 0) return evt;
+    }
+    return EVENT_TYPES[0];
+  }
+
+  function startWorldEvent(now){
+    const evt = pickEventType();
+    GameState.eventState = {
+      ...evt,
+      startedAt: now,
+      endsAt: now + EVENT_DURATION_MS,
+    };
+    GameState.eventEndsAt = now + EVENT_DURATION_MS;
+    GameState.eventNextAt = now + EVENT_CYCLE_MS;
+    showBanner(`✨ イベント発動: ${evt.icon} ${evt.jp} (${Math.floor(EVENT_DURATION_MS/1000)}秒)`, 'rare');
+    applyEventVisuals(GameState.eventState, now);
+    renderEventBadge(now);
+  }
+
+  function endWorldEvent(now){
+    const evt = GameState.eventState;
+    if(evt){
+      showBanner(`イベント終了: ${evt.icon} ${evt.jp}`, null);
+    }
+    GameState.eventState = null;
+    GameState.eventEndsAt = 0;
+    GameState.eventNextAt = now + EVENT_CYCLE_MS;
+    applyEventVisuals(null, now);
+    renderEventBadge(now);
+  }
+
+  function updateWorldEvent(now){
+    if(GameState.eventState){
+      if(now >= GameState.eventEndsAt){
+        endWorldEvent(now);
+      }
+    } else if(now >= GameState.eventNextAt){
+      startWorldEvent(now);
+    }
+    applyEventVisuals(GameState.eventState, now);
+    renderEventBadge(now);
+  }
+
+  function getCurrentEvent(){
+    return GameState.eventState || null;
+  }
+
+  const ATTRIBUTE_CHANCE = 1 / 3;
+
+  function rollMonsterAttributeKey(){
+    const active = getCurrentEvent();
+    if(!active) return null;
+    return Math.random() < ATTRIBUTE_CHANCE ? active.key : null;
+  }
+
+  function getMonsterAttributeInfo(monsterLike){
+    const key = monsterLike && monsterLike.eventAffinity;
+    return key ? getEventByKey(key) : null;
+  }
+
+  function formatAttributeLabel(monsterLike){
+    const evt = getMonsterAttributeInfo(monsterLike);
+    return evt ? `${evt.icon} ${evt.jp}` : '無属性';
+  }
+
+  function getMonsterEventAffinity(def, monsterLike){
+    const active = getCurrentEvent();
+    if(active) return active;
+    const key = monsterLike && monsterLike.eventAffinity;
+    return key ? getEventByKey(key) : null;
+  }
+
+  function eventRarityBoost(def, evt){
+    if(!evt) return 1;
+    const progress = rarityIndex(def.rarity) / Math.max(1, RARITY_ORDER.length - 1);
+    const curve = Math.pow(progress, evt.curve || 1.4);
+    return evt.minBoost + (evt.maxBoost - evt.minBoost) * curve;
+  }
+
+  function renderEventBadge(now = performance.now()){
+    const el = document.getElementById('event-badge');
+    if(!el) return;
+    const active = getCurrentEvent();
+    if(active){
+      const remain = Math.max(0, Math.ceil((GameState.eventEndsAt - now) / 1000));
+      el.className = 'active';
+      el.innerHTML = `<span class="icon">${active.icon}</span>${active.jp} 発動中 <span class="sub">あと ${remain} 秒 / 属性付きモンスター出現中</span>`;
+    } else {
+      const remain = Math.max(0, Math.ceil((GameState.eventNextAt - now) / 1000));
+      const mm = String(Math.floor(remain / 60)).padStart(2,'0');
+      const ss = String(remain % 60).padStart(2,'0');
+      el.className = 'idle';
+      el.innerHTML = `<span class="icon">⏳</span>次のイベントまで ${mm}:${ss} <span class="sub">5分ごとに1分間だけ発動 / 10種類</span>`;
+    }
+  }
+
+  function rgbToCss(hex, alpha){
+    const c = new THREE.Color(hex);
+    const n = Math.round(alpha * 1000) / 1000;
+    return `rgba(${Math.round(c.r*255)}, ${Math.round(c.g*255)}, ${Math.round(c.b*255)}, ${n})`;
+  }
+
+  let activeEventVisualKey = null;
+  function applyEventVisuals(evt, now){
+    if(!eventVisualOverlay) return;
+    if(!evt){
+      if(activeEventVisualKey !== null){
+        activeEventVisualKey = null;
+        applyStageVisuals(GameState.stage);
+      }
+      eventVisualOverlay.style.opacity = '0';
+      return;
+    }
+
+    const stageTheme = getStageTheme(GameState.stage);
+    const evtColor = new THREE.Color(evt.color);
+    const bright = evtColor.clone().lerp(new THREE.Color(0xFFFFFF), 0.28);
+    const deep = evtColor.clone().lerp(new THREE.Color(0x0B1020), 0.42);
+    const pulse = 0.5 + 0.5 * Math.sin((now || performance.now()) * 0.003);
+
+    if(activeEventVisualKey !== evt.key){
+      activeEventVisualKey = evt.key;
+      showBanner(`🌍 ${evt.icon} ${evt.jp} でマップが変化!`, 'rare');
+    }
+
+    scene.background.setHex(evt.background || evt.color);
+    if(scene.fog){
+      scene.fog.color.setHex(evt.fogColor || evt.color);
+      scene.fog.near = Math.max(6, (stageTheme.fogNear || 16) - 2.5);
+      scene.fog.far = Math.max(36, (stageTheme.fogFar || 50) - 6);
+    }
+
+    const stageGrass = new THREE.Color(stageTheme.grass);
+    const stageSand = new THREE.Color(stageTheme.sand);
+    const stageWater = new THREE.Color(stageTheme.water);
+    const stageRing = new THREE.Color(stageTheme.ring);
+    const stageHemi = new THREE.Color(stageTheme.hemi);
+    const stageGround = new THREE.Color(stageTheme.ground);
+    const stageSun = new THREE.Color(stageTheme.sun);
+    const blend = 0.52;
+
+    grass.material.color.copy(stageGrass).lerp(evtColor, blend);
+    sand.material.color.copy(stageSand).lerp(bright, 0.22);
+    water.material.color.copy(stageWater).lerp(evtColor, 0.35);
+    ring.material.color.copy(stageRing).lerp(bright, 0.42);
+    hemi.color.copy(stageHemi).lerp(bright, 0.22);
+    hemi.groundColor.copy(stageGround).lerp(deep, 0.24);
+    sun.color.copy(stageSun).lerp(bright, 0.58);
+    sun.intensity = Math.max(stageTheme.sunIntensity || 0.9, 1.15 + pulse * 0.55);
+    treeLeafMaterials.forEach((mat, i)=>{
+      const wobble = 0.18 + (i % 3) * 0.05;
+      mat.color.copy(new THREE.Color(stageTheme.leaves)).lerp(evtColor, wobble);
+    });
+
+    islandGroup.rotation.y += 0.0008 + pulse * 0.00055;
+
+    const aura = rgbToCss(evt.color, 0.28 + (evt.auraOpacity || 0.25) * 0.52);
+    const flare = rgbToCss(evt.color, 0.12);
+    eventVisualOverlay.style.opacity = '1';
+    eventVisualOverlay.style.background = `radial-gradient(circle at 20% 18%, ${rgbToCss(evt.color, 0.40)}, transparent 34%), radial-gradient(circle at 80% 22%, ${rgbToCss(evt.color, 0.28)}, transparent 30%), radial-gradient(circle at 50% 80%, ${rgbToCss(evt.color, 0.18)}, transparent 42%), linear-gradient(180deg, ${aura}, ${flare})`;
+  }
+
+  function getMonsterTheme(def, monsterLike){
+    return getMonsterEventAffinity(def, monsterLike);
+  }
+
+  function applyMonsterTheme(mesh, def, monsterLike){
+    if(!mesh || !mesh.userData) return;
+    const theme = getMonsterTheme(def, monsterLike);
+    const bodyMat = mesh.userData.bodyMat;
+    const footMat = mesh.userData.footMat;
+    const aura = mesh.userData.aura;
+    const sigil = mesh.userData.sigil;
+    const spark = mesh.userData.sparkRing;
+    const baseColor = new THREE.Color(def.color);
+    if(!bodyMat) return;
+
+    if(theme){
+      const tint = new THREE.Color(theme.color);
+      const mixAmount = Math.min(0.58, Math.max(0.18, theme.bodyShift || 0.25));
+      bodyMat.color.copy(baseColor).lerp(tint, mixAmount);
+      bodyMat.emissive.copy(tint);
+      bodyMat.emissiveIntensity = (def.glow ? 0.35 : 0.08) + (theme.glowBoost || 0.22);
+      if(footMat) footMat.color.copy(bodyMat.color);
+      if(aura){
+        aura.visible = true;
+        aura.material.color.setHex(theme.color);
+        aura.material.opacity = theme.auraOpacity || 0.3;
+        aura.scale.setScalar(theme.auraScale || 1.55);
+      }
+      if(sigil){
+        sigil.visible = true;
+        sigil.material.color.setHex(theme.color);
+      }
+      if(spark){
+        spark.material.color.setHex(theme.color);
+        spark.material.opacity = Math.min(0.8, 0.4 + (theme.auraOpacity || 0.25));
+      }
+      mesh.userData.eventPulse += 0.03;
+    } else {
+      bodyMat.color.setHex(def.color);
+      bodyMat.emissive.setHex(def.glow ? def.color : 0x000000);
+      bodyMat.emissiveIntensity = def.glow ? 0.35 : 0;
+      if(footMat) footMat.color.setHex(def.color);
+      if(aura){
+        aura.visible = false;
+      }
+      if(sigil){
+        sigil.visible = false;
+      }
+      if(spark){
+        spark.material.color.setHex(def.color);
+        spark.material.opacity = 0.55;
+      }
+      mesh.userData.eventPulse = 0;
+    }
+  }
 
   // Stage N requires this many coins to advance to N+1. Costs escalate so later
   // stages are a real investment, not a rubber-stamp.
@@ -1448,7 +1741,7 @@ const LUCK_BANDS = [
   // Permanent luck now rises by x1.2 each purchase, instead of adding a small
   // flat amount. Stage still helps a little, but it is intentionally mild.
   function luckMultiplier(){
-    const purchasedBonus = Math.pow(1.42, GameState.luckLevel);
+    const purchasedBonus = Math.pow(1.28, GameState.luckLevel);
     const stageBonus = 1 + (GameState.stage - 1) * 0.025;
     return Math.min(1000000000000000, purchasedBonus * stageBonus);
   }
@@ -1487,8 +1780,9 @@ const LUCK_BANDS = [
     const rarityRamp = 0.45 + Math.pow(progress, 1.55) * 0.95;
     const bandRamp = 1 + (band.boostMax - 1) * (0.25 + 0.75 * bandProgress);
     const stageRamp = 1 + Math.min(0.35, Math.max(0, GameState.stage - 1) * 0.01);
+    const eventBoost = eventRarityBoost(def, getCurrentEvent());
 
-    return Math.min(1000000, rarityRamp * bandRamp * stageRamp);
+    return Math.min(1000000, rarityRamp * bandRamp * stageRamp * eventBoost);
   }
 
   // Each monster gets a slight, deterministic odds bias so that even inside the
@@ -1727,10 +2021,10 @@ function formatChancePercentValue(pct){
   function saveGame(){
     try{
       const payload = {
-        v: 2,
+        v: 3,
         coins: GameState.coins,
         nextEntityId: GameState.nextEntityId,
-        party: GameState.party.map(p=>({ id:p.id, defId:p.defId, deployed:p.deployed, level:p.level || 0 })),
+        party: GameState.party.map(p=>({ id:p.id, defId:p.defId, deployed:p.deployed, level:p.level || 0, eventAffinity:p.eventAffinity || null })),
         stage: GameState.stage,
         luckLevel: GameState.luckLevel,
         maxParty: GameState.maxParty,
@@ -1787,7 +2081,7 @@ function formatChancePercentValue(pct){
       // (e.g. after a future content update) so a stale save can't crash boot
       const def = MONSTER_DEFS.find(d=>d.id===saved.defId);
       if(!def) return;
-      const p = { id: saved.id, defId: saved.defId, deployed: !!saved.deployed, level: Math.max(0, Math.floor(saved.level || 0)) };
+      const p = { id: saved.id, defId: saved.defId, deployed: !!saved.deployed, level: Math.max(0, Math.floor(saved.level || 0)), eventAffinity: typeof saved.eventAffinity === 'string' ? saved.eventAffinity : null };
       GameState.party.push(p);
       if(typeof saved.id === 'number' && saved.id >= maxId) maxId = saved.id+1;
     });
@@ -2089,18 +2383,39 @@ function formatChancePercentValue(pct){
     const footMat = new THREE.MeshStandardMaterial({color:def.color});
     const footL = new THREE.Mesh(footGeo, footMat); footL.position.set(-0.17,0.07,0.04); footL.scale.set(1,0.6,1);
     const footR = new THREE.Mesh(footGeo, footMat); footR.position.set(0.17,0.07,0.04); footR.scale.set(1,0.6,1);
-    g.add(body, eyeL, eyeR, pL, pR, footL, footR);
+
+    const auraGeo = new THREE.SphereGeometry(0.66, 16, 16);
+    const auraMat = new THREE.MeshBasicMaterial({ color:def.color, transparent:true, opacity:0, side:THREE.DoubleSide, depthWrite:false });
+    const aura = new THREE.Mesh(auraGeo, auraMat);
+    aura.position.y = 0.4;
+    aura.visible = false;
+
+    const sigilGeo = new THREE.OctahedronGeometry(0.11, 0);
+    const sigilMat = new THREE.MeshBasicMaterial({ color:def.color, transparent:true, opacity:0, depthWrite:false });
+    const sigil = new THREE.Mesh(sigilGeo, sigilMat);
+    sigil.position.set(0, 0.98, 0);
+    sigil.visible = false;
+
+    g.add(body, eyeL, eyeR, pL, pR, footL, footR, aura, sigil);
 
     // rarity sparkle ring for rare+ monsters
+    let spark = null;
     if(def.glow){
       const sparkGeo = new THREE.RingGeometry(0.5,0.56,20);
       const sparkMat = new THREE.MeshBasicMaterial({color:def.color, transparent:true, opacity:0.55, side:THREE.DoubleSide});
-      const spark = new THREE.Mesh(sparkGeo, sparkMat);
+      spark = new THREE.Mesh(sparkGeo, sparkMat);
       spark.rotation.x = -Math.PI/2;
       spark.position.y = 0.03;
       g.add(spark);
-      g.userData.sparkRing = spark;
     }
+
+    g.userData.bodyMat = bodyMat;
+    g.userData.footMat = footMat;
+    g.userData.aura = aura;
+    g.userData.sigil = sigil;
+    g.userData.sparkRing = spark;
+    g.userData.eventPulse = 0;
+    g.userData.baseColor = new THREE.Color(def.color);
     return g;
   }
 
@@ -2112,6 +2427,7 @@ function formatChancePercentValue(pct){
     mesh.position.set(m.x, 0, m.z);
     scene.add(mesh);
     wildMeshMap.set(m.id, { group:mesh, bobPhase:Math.random()*Math.PI*2, def });
+    applyMonsterTheme(mesh, def, m);
   }
   function removeWildMonsterMesh(id){
     const rec = wildMeshMap.get(id);
@@ -2122,6 +2438,7 @@ function formatChancePercentValue(pct){
     mesh.scale.setScalar(0.62); // slightly smaller so the trailing party reads as "following", not blocking view
     scene.add(mesh);
     partyMeshMap.set(p.id, { group:mesh, bobPhase:Math.random()*Math.PI*2, def });
+    applyMonsterTheme(mesh, def, p);
   }
   function removePartyMonsterMesh(id){
     const rec = partyMeshMap.get(id);
@@ -2214,6 +2531,7 @@ function formatChancePercentValue(pct){
       spawnDef: roll.def,
       spawnChance: roll.chance,
       timingSeed: performance.now() + Math.random()*777,
+      eventAffinity: rollMonsterAttributeKey(),
     };
     GameState.mounds.push(mound);
     const mesh = buildMoundMesh();
@@ -2400,6 +2718,7 @@ function formatChancePercentValue(pct){
   const monsterValEl = document.getElementById('monster-val');
   const popupLayer = document.getElementById('popup-layer');
   const bannerWrap = document.getElementById('banner-wrap');
+  const eventVisualOverlay = document.getElementById('event-visual-overlay');
   const partyStrip = document.getElementById('party-strip');
   const stageValEl = document.getElementById('stage-val');
   const stageCostValEl = document.getElementById('stage-cost-val');
@@ -2456,6 +2775,7 @@ function formatChancePercentValue(pct){
     renderProgressPanel();
     if(inventoryOpen) renderInventory(); // keep inventory panel in sync if it's open while things change
     if(indexOpen) renderIndex();
+    renderEventBadge();
     // refreshHud already runs after every capture, deploy/recall toggle,
     // sale, stage-up, luck-up, and theft, so hooking the autosave here
     // covers all of them in one place.
@@ -2501,7 +2821,7 @@ function formatChancePercentValue(pct){
     }
     GameState.coins -= cost;
     GameState.luckLevel += 1;
-    showBanner(`永続ラック ${formatMultiplierAmount(luckMultiplier())} (${getLuckBand(luckMultiplier()).label})!`, 'rare');
+    showBanner(`永続ラック ${formatMultiplierAmount(luckMultiplier())}（購入ごとに ×1.28） (${getLuckBand(luckMultiplier()).label})!`, 'rare');
     refreshHud();
   }
 
@@ -2646,7 +2966,7 @@ function formatChancePercentValue(pct){
       const roll = pickWeightedMonsterDef();
       const def = roll.def;
       const pos = randomIslandPoint(1.5, GameState.islandRadius-1.0);
-      const m = { id: GameState.nextEntityId++, defId: def.id, x: pos.x, z: pos.z, spawnChance: roll.chance };
+      const m = { id: GameState.nextEntityId++, defId: def.id, x: pos.x, z: pos.z, spawnChance: roll.chance, eventAffinity: rollMonsterAttributeKey() };
       GameState.wildMonsters.push(m);
       addWildMonsterMesh(m, def);
     }
@@ -2686,7 +3006,7 @@ function formatChancePercentValue(pct){
       if(Math.sqrt(dx*dx+dz*dz) < 0.75){
         GameState.wildMonsters.splice(i,1);
         removeWildMonsterMesh(m.id);
-        addToParty(m.defId, { chance: m.spawnChance });
+        addToParty(m.defId, { chance: m.spawnChance, eventAffinity: m.eventAffinity });
       }
     }
   }
@@ -2701,7 +3021,7 @@ function formatChancePercentValue(pct){
     const chance = typeof opts.chance === 'number' && isFinite(opts.chance) ? opts.chance : null;
     // Newly caught monsters go into the roster undeployed; they sit in the
     // inventory until the player presses 出陣 (deploy) for them.
-    const p = { id: GameState.nextEntityId++, defId, deployed:false, level:0 };
+    const p = { id: GameState.nextEntityId++, defId, deployed:false, level:0, eventAffinity: Object.prototype.hasOwnProperty.call(opts, 'eventAffinity') ? opts.eventAffinity : rollMonsterAttributeKey() };
     GameState.party.push(p);
     const rarityInfo = RARITY_INFO[def.rarity];
     const chanceText = chance === null ? '' : ` (${formatChanceLabel(chance)})`;
@@ -2853,6 +3173,7 @@ function formatChancePercentValue(pct){
         <div class="lvl">Lv.${level}</div>
         <div class="coinval">💰${formatCoinAmount(sellPrice)}</div>
         <div class="income">収入/秒 ${formatCoinAmount(incomePerMonster(def, level))}</div>
+        <div class="attr-chip ${p.eventAffinity ? '' : 'none'}">属性 ${formatAttributeLabel(p)}</div>
         <div class="upgrade-cost">強化費 ${formatCoinAmount(upCost)}</div>
         ${p.deployed ? '<div class="deployed-tag">出陣中</div>' : ''}
         <button class="upgrade-btn" data-upgrade-id="${p.id}">強化</button>
@@ -3071,7 +3392,7 @@ function formatChancePercentValue(pct){
     removeMoundMesh(mo.id);
     nearbyReadyMound = null;
     moundPrompt.style.display = 'none';
-    addToParty(mo.spawnDef.id, { chance: mo.spawnChance });
+    addToParty(mo.spawnDef.id, { chance: mo.spawnChance, eventAffinity: mo.eventAffinity ?? null });
   }
 
   function trySpawnMound(now){
@@ -3252,8 +3573,10 @@ function formatChancePercentValue(pct){
   let lastTime = performance.now();
   const hadSave = loadGame();       // restore coins + inventory + stage + luck before anything else spawns
   if(hadSave) restoreDeployedMeshes();
+  GameState.eventNextAt = lastTime + EVENT_CYCLE_MS;
   seedStart();                      // wild monsters on the island are always freshly seeded, save or no save
   if(hadSave) showBanner('前回のデータを読み込みました', 'good');
+  renderEventBadge(lastTime);
   lastThiefAt = lastTime - GameState.thiefInterval + 20000; // first thief ~20s after boot regardless of interval length
   GameState.lastMoundAt = lastTime - GameState.moundInterval + 6000; // first mound ~6s after boot
   GameState.lastIncomeAt = lastTime; // passive income starts accruing from boot
@@ -3264,6 +3587,7 @@ function formatChancePercentValue(pct){
     lastTime = now;
 
     updateIncome(now);
+    updateWorldEvent(now);
 
     // movement from joystick, relative to camera yaw (forward = where you're looking, flattened)
     let isMoving = false;
@@ -3309,6 +3633,7 @@ function formatChancePercentValue(pct){
         rec.bobPhase += dt*2.2;
         rec.group.position.y = Math.sin(rec.bobPhase)*0.06;
         if(rec.group.userData.sparkRing) rec.group.userData.sparkRing.rotation.z += dt*0.6;
+        applyMonsterTheme(rec.group, rec.def, m);
       }
     }
 
@@ -3324,6 +3649,7 @@ function formatChancePercentValue(pct){
       rec.bobPhase += dt*2.4;
       rec.group.position.y = Math.sin(rec.bobPhase+i)*0.05;
       if(rec.group.userData.sparkRing) rec.group.userData.sparkRing.rotation.z += dt*0.6;
+      applyMonsterTheme(rec.group, rec.def, p);
     });
 
     trySpawnMound(now);
@@ -3459,7 +3785,7 @@ function formatChancePercentValue(pct){
       return;
     }
     if(mode === 'party'){
-      addToParty(def.id, { chance: null });
+      addToParty(def.id, { chance: null, eventAffinity: rollMonsterAttributeKey() });
       return;
     }
     if(mode === 'wild'){
@@ -3470,6 +3796,7 @@ function formatChancePercentValue(pct){
         x: pos.x,
         z: pos.z,
         spawnChance: null,
+        eventAffinity: rollMonsterAttributeKey(),
       };
       GameState.wildMonsters.push(m);
       addWildMonsterMesh(m, def);
